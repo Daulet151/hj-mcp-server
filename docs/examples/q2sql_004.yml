@@ -1,0 +1,27 @@
+id: q2sql_004
+question_ru: "кол-во юзеров с активным абонементом которые находятся вне какого-либо марафона"
+intents: ["users_with_active_heropass_outside_marathon"]
+assumptions:
+  - ""
+
+sql:
+  dialect: postgres
+  statement: |
+    with users_with_active_marathonevents as (
+      select * 
+      from olap_schema.usermarathonevent
+      where me_startttime <= now() and me_endtime >= now()
+    )
+    SELECT 
+      count(distinct u."user") as cnt_users
+    FROM 
+        olap_schema.userheropass u
+    LEFT JOIN 
+        users_with_active_marathonevents  m ON u."user" = m."user" 
+    WHERE 
+        u.status = 'active'
+    AND m.usermarathonevent IS NULL
+
+expected_schema:
+  - name: cnt_users
+    type: int64

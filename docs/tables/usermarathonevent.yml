@@ -1,0 +1,160 @@
+table: olap_schema.usermarathonevent
+description: "Участие пользователей в марафонах (программах тренировок)"
+grain: "usermarathonevent (уникальная запись участия пользователя в конкретном событии марафона)"
+
+columns:
+  - name: "user"
+    type: varchar(24)
+    role: FK
+    description: "ID пользователя"
+
+  - name: class
+    type: varchar(24)
+    description: "класс юзера"
+    allowed_values: ["A", "B", "C", "D"]
+
+  - name: username
+    type: text
+    description: "Логин пользователя в системе"
+    
+  - name: firstname
+    type: text
+    description: "Имя пользователя"
+    synonyms_ru: ["имя"]
+    
+  - name: lastname
+    type: text
+    description: "Фамилия пользователя"
+    synonyms_ru: ["фамилия"]
+    
+  - name: email
+    type: text
+    description: "Email адрес пользователя"
+    pii: true
+
+  - name: sex
+    type: enum
+    description: "Пол пользователя"
+    allowed_values: ["male", "female"]
+    synonyms_ru: ["пол"]  
+
+  - name: phonenumber
+    type: text
+    description: "Номер телефона пользователя"
+    pii: true
+
+  - name: shareduser
+    type: varchar(24)
+    description: "ID юзера который поделился реферальным кодом"
+
+  - name: user_created_at
+    type: timestamp
+    description: "Дата и время создания пользователя в системе"
+    
+  - name: usermarathonevent
+    type: varchar(24)
+    role: PK
+    description: "Уникальный ID записи участия юезра в марафоне"
+
+  - name: marathon
+    type: varchar(24)
+    description: "ID марафона"
+    
+  - name: marathon_name
+    type: text
+    description: "Название марафона/программы"
+    allowed_values:
+      # Триальные программы
+      - "Hero's Week"
+      - "Basecamp"
+      - "Первый шаг"
+      - "Индивидуальная программа"
+      
+      # Специальные программы
+      - "Summer Camp"
+      - "Hero's Challenge"
+      - "Freestyle"
+      
+      # Fit body серия
+      - "Fit body I"
+      - "Fit body II"
+      - "Fit body III"
+      - "Fit body IV"
+      - "Fit body Extreme"
+      - "Fit body Reshape I"
+      - "Fit body Reshape II"
+      - "Fit body Reshape III"
+      - "Fit body Reshape IV"
+      - "Fit body Reshape Extreme"
+      
+      # Build серия
+      - "Build I"
+      - "Build II"
+      - "Build III"
+      - "Build IV"
+      - "Build Extreme"
+      
+      # Burn серия
+      - "Burn I"
+      - "Burn II"
+      - "Burn III"
+      - "Burn IV"
+      - "Burn Extreme"
+      
+      # Athlete серия
+      - "Athlete I"
+      - "Athlete II"
+      - "Athlete III"
+      - "Athlete IV"
+      - "Athlete Extreme"
+      
+      # Legs & Glutes серия
+      - "Legs & Glutes I"
+      - "Legs & Glutes II"
+      - "Legs & Glutes III"
+      - "Legs & Glutes IV"
+      - "Legs & Glutes Extreme"
+    synonyms_ru: ["программа", "марафон"]
+    business_notes: |
+      Триальные программы (для новых пользователей без HeroPass):
+      - Hero's Week, Basecamp, Первый шаг, Индивидуальная программа
+      
+      Программы организованы по сериям:
+      - Fit body: базовые тренировки для общей физической формы
+      - Fit body Reshape: программы для коррекции фигуры
+      - Build: программы на набор мышечной массы
+      - Burn: программы для сжигания жира
+      - Athlete: атлетические программы высокой интенсивности
+      - Legs & Glutes: программы на нижнюю часть тела
+      
+      Уровни сложности: I (начальный) → II → III → IV → Extreme (максимальный)
+
+    
+  - name: me_startttime
+    type: timestamp
+    description: "Дата начала участия в марафоне"
+    
+  - name: me_endtime
+    type: timestamp
+    description: "Дата окончания участия в марафоне"
+    
+  - name: iscompleted
+    type: bool
+    description: "Марафон завершен пользователем?"
+    synonyms_ru: ["завершен", "пройден", "окончен"]
+    
+  - name: status
+    type: enum
+    description: "Статус участия в марафоне"
+    
+  - name: club
+    type: varchar(24)
+    description: "ID клуба"
+    
+  - name: club_name
+    type: text
+    description: "Название клуба"
+
+business_rules:
+  - "Триальщик: пользователь на марафоне (Hero's Week/Basecamp/Первый Шаг) БЕЗ активного HeroPass"
+  - "Триальщики определяются через LEFT JOIN с userheropass WHERE heropass IS NULL"

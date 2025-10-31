@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  # Slack Bot Service
+  slack-bot:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    container_name: herojourney-slack-bot
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - ../.env
+    environment:
+      - FLASK_DEBUG=False
+      - LOG_LEVEL=INFO
+    command: python app.py
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - herojourney-network
+    volumes:
+      - ../docs:/app/docs:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # MCP Server Service (optional - for standalone MCP server)
+  # Uncomment if you want to run MCP server as separate service
+  # mcp-server:
+  #   build:
+  #     context: ..
+  #     dockerfile: deployment/Dockerfile
+  #   container_name: herojourney-mcp-server
+  #   restart: unless-stopped
+  #   env_file:
+  #     - ../.env
+  #   environment:
+  #     - LOG_LEVEL=INFO
+  #   command: python mcp_server.py
+  #   networks:
+  #     - herojourney-network
+  #   volumes:
+  #     - ../docs:/app/docs:ro
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "3"
+
+networks:
+  herojourney-network:
+    driver: bridge

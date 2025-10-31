@@ -1,0 +1,85 @@
+table: olap_schema.notifications
+description: "История отправленных уведомлений пользователям"
+grain: "id (одно уведомление = одна запись)"
+freshness_sla_hours: 0  # Обновляется в реальном времени
+timezone: "Asia/Almaty"
+
+columns:
+  - name: id
+    type: varchar(24)
+    role: PK
+    description: "Уникальный идентификатор уведомления"
+    null_semantics: "NOT NULL"
+    
+  - name: channel
+    type: text
+    description: "Канал отправки уведомления"
+    allowed_values: ["email", "push", "sms", "slack"]
+    synonyms_ru: ["канал", "способ отправки"]
+    
+  - name: users
+    type: array<varchar>
+    description: "Массив ID пользователей-получателей"
+    synonyms_ru: ["получатели", "адресаты"]
+    business_notes: "Используйте ANY(users) для проверки вхождения конкретного user_id"
+    
+  - name: event
+    type: varchar(24)
+    description: "ID события-триггера, вызвавшего отправку уведомления"
+    null_semantics: "NULL = уведомление отправлено вручную"
+    
+  - name: club
+    type: varchar(24)
+    description: "ID клуба, от которого отправлено уведомление"
+    
+  - name: heading
+    type: text
+    description: "Заголовок уведомления"
+    synonyms_ru: ["тема", "заголовок", "subject"]
+    
+  - name: message
+    type: text
+    description: "Текст сообщения уведомления"
+    synonyms_ru: ["текст", "сообщение", "body"]
+    
+  - name: type
+    type: text
+    description: "Тип уведомления"
+    allowed_values: ["promo", "reminder", "system", "marketing", "transactional"]
+    synonyms_ru: ["тип", "категория"]
+    
+  - name: success
+    type: array<text>
+    description: "Массив ID пользователей, которым уведомление успешно доставлено"
+    null_semantics: "NULL или пустой массив = нет успешных доставок"
+    
+  - name: failure
+    type: text
+    description: "Описание ошибок доставки (JSON или текст)"
+    null_semantics: "NULL = все доставлено успешно"
+    
+  - name: metadata
+    type: text
+    description: "Дополнительные данные в формате JSON"
+    null_semantics: "NULL = нет дополнительных данных"
+    
+  - name: created_at
+    type: timestamp
+    description: "Дата и время создания уведомления (Asia/Almaty)"
+    synonyms_ru: ["дата создания", "время отправки"]
+    
+  - name: updated_at
+    type: timestamp
+    description: "Дата и время последнего обновления статуса доставки"
+    synonyms_ru: ["дата обновления"]
+
+business_rules:
+  - "Для поиска уведомлений конкретного пользователя: WHERE 'user_id' = ANY(users)"
+  - "Успешная доставка: WHERE success IS NOT NULL AND array_length(success, 1) > 0"
+  - "Неудачная доставка: WHERE failure IS NOT NULL"
+  - "Уведомления за период: WHERE created_at BETWEEN date1 AND date2"
+
+tests:
+  - "unique(id)"
+  - "not_null(id, channel, created_at)"
+  - "accepted_values(channel, ['email', 'push', 'sms', 'slack'])"

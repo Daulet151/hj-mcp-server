@@ -1,0 +1,57 @@
+entities:
+  - name: "user"
+    label_ru: "Пользователь"
+    keys: ["user"]
+    primary_table: olap_schema.userheropass
+    synonyms_ru: ["клиент", "юзер", "пользователь", "участник"]
+    
+  - name: heropass
+    label_ru: "Абонемент"
+    keys: [heropass]
+    primary_table: olap_schema.userheropass
+    synonyms_ru: ["абонемент", "хиропасс", "подписка"]
+    
+  - name: marathon
+    label_ru: "Марафон"
+    keys: [marathon]
+    primary_table: olap_schema.usermarathonevent
+    synonyms_ru: ["программа", "марафон"]
+
+relationships:
+  - left: olap_schema.usermarathonevent.user
+    right: olap_schema.userheropass.user
+    type: many_to_one
+    description: "Один пользователь может участвовать в нескольких марафонах"
+
+metrics:
+  - name: users_with_expiring_heropass
+    label_ru: "Пользователи с истекающим абонементом"
+    type: count
+    definition: |
+      SELECT COUNT(DISTINCT user)
+      FROM olap_schema.userheropass
+      WHERE hp_endtime BETWEEN NOW() AND NOW() + INTERVAL '7 days'
+      AND status = 'active'
+    synonyms_ru: ["истекающие абонементы", "заканчивающиеся подписки"]
+    
+  - name: trial_users
+    label_ru: "Триальщики"
+    type: count
+    definition: |
+      SELECT COUNT(DISTINCT m.user)
+      FROM olap_schema.usermarathonevent m
+      LEFT JOIN olap_schema.userheropass h ON m.user = h.user
+      WHERE m.marathon_name IN ('Hero''s Week', 'Basecamp', 'Первый Шаг')
+      AND h.heropass IS NULL
+    synonyms_ru: ["триальные пользователи", "на пробном периоде"]
+
+time_dimensions:
+  - name: hp_endtime
+    table: olap_schema.userheropass
+    timezone: "Asia/Almaty"
+    description: "Дата окончания абонемента"
+    
+  - name: me_startttime
+    table: olap_schema.usermarathonevent
+    timezone: "Asia/Almaty"
+    description: "Дата начала марафона"

@@ -1,0 +1,31 @@
+[Unit]
+Description=Hero's Journey MCP Server - SQL Assistant
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/select_bot_service
+Environment="PATH=/opt/select_bot_service/venv/bin"
+EnvironmentFile=/opt/select_bot_service/.env
+ExecStart=/opt/select_bot_service/venv/bin/python /opt/select_bot_service/mcp_server.py
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=herojourney-mcp-server
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

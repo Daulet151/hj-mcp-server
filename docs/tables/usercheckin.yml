@@ -1,0 +1,85 @@
+table: olap_schema.usercheckin
+description: "Чекины пользователей на тренировки"
+grain: "id (один чекин = одна запись посещения)"
+freshness_sla_hours: 0  # Обновляется в реальном времени
+timezone: "Asia/Almaty"
+
+columns:
+  - name: id
+    type: varchar(24)
+    role: PK
+    description: "Уникальный идентификатор чекина"
+    null_semantics: "NOT NULL"
+    
+  - name: "user"
+    type: varchar(24)
+    role: FK
+    description: "ID пользователя, совершившего чекин"
+    synonyms_ru: ["пользователь", "клиент", "посетитель", "атлет"]
+    
+  - name: event
+    type: varchar(24)
+    description: "ID события/тренировки, на которую был чекин"
+    synonyms_ru: ["событие", "тренировка", "занятие"]
+    
+  - name: programset
+    type: varchar(24)
+    description: "ID набора программ"
+    synonyms_ru: ["программа", "сет программ"]
+    null_semantics: "NULL = не привязан к программе"
+
+  - name: programset_name
+    type: text
+    description: "Название тренировки"
+    synonyms_ru: ["наименование тренировки", "назввание тренировки"]
+    
+  - name: programset_type
+    type: text
+    description: "Название типа тренировки"
+    synonyms_ru: ["Название типа тренировки", "Ниаменование типа тренировки"]
+
+  - name: weeknumber
+    type: float8
+    description: "Номер недели в программе или периоде"
+    synonyms_ru: ["неделя", "номер недели"]
+    null_semantics: "NULL = неделя не определена"
+    business_notes: "Используется для отслеживания прогресса в программах"
+    
+  - name: isevaluated
+    type: bool
+    description: "Была ли проведена оценка после тренировки"
+    synonyms_ru: ["оценен", "есть оценка", "с оценкой"]
+    business_notes: "true = пользователь оценил тренировку"
+    
+  - name: visitedanotherclub
+    type: bool
+    description: "Посетил ли пользователь другой клуб (не свой домашний)"
+    synonyms_ru: ["другой клуб", "гостевое посещение", "визит в другой филиал"]
+    business_notes: "true = чекин в другом клубе, не в домашнем"
+    
+  - name: created_at
+    type: timestamp
+    description: "Дата и время чекина (Asia/Almaty)"
+    synonyms_ru: ["дата чекина", "время посещения", "когда пришел"]
+    business_notes: "Время фактического чекина пользователя"
+    
+  - name: updated_at
+    type: timestamp
+    description: "Дата и время последнего обновления записи"
+    synonyms_ru: ["дата обновления"]
+
+business_rules:
+  - "Активные посещения: WHERE created_at >= NOW() - INTERVAL '1 day'"
+  - "Посещения за период: WHERE created_at BETWEEN date1 AND date2"
+  - "Посещения с оценкой: WHERE isevaluated = true"
+  - "Гостевые посещения: WHERE visitedanotherclub = true"
+  - "Посещения конкретного пользователя: WHERE user = 'user_id'"
+  - "Посещения по неделям: GROUP BY weeknumber"
+  - "Частота посещений: COUNT(*) GROUP BY user, DATE_TRUNC('week', created_at)"
+
+tests:
+  - "unique(id)"
+  - "not_null(id, user, created_at)"
+  - "relationships(user, olap_schema.userheropass, user)"
+
+pii: false

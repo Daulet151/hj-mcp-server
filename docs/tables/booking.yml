@@ -1,0 +1,129 @@
+table: olap_schema.booking
+description: "Записи пользователей на тренировки и занятия"
+grain: "id (одна запись = одно бронирование)"
+freshness_sla_hours: 1
+timezone: "Asia/Almaty"
+
+columns:
+  - name: id
+    type: varchar(24)
+    role: PK
+    description: "Уникальный идентификатор бронирования"
+    null_semantics: "NOT NULL"
+    
+  - name: "user"
+    type: varchar(24)
+    role: FK
+    description: "ID пользователя, сделавшего бронирование"
+    synonyms_ru: ["пользователь", "клиент", "юзер", "атлет"]
+    
+  - name: event
+    type: varchar(24)
+    description: "ID события/занятия"
+    synonyms_ru: ["событие", "занятие", "тренировка"]
+    
+  - name: station
+    type: varchar(24)
+    description: "ID станции/зала"
+    synonyms_ru: ["станция", "зал", "площадка"]
+    
+  - name: level
+    type: varchar(24)
+    description: "ID уровня сложности"
+    synonyms_ru: ["уровень", "сложность"]
+    
+  - name: program
+    type: varchar(24)
+    description: "ID программы тренировки"
+    synonyms_ru: ["программа"]
+    
+  - name: exercise
+    type: varchar(24)
+    description: "ID упражнения"
+    synonyms_ru: ["упражнение"]
+    
+  - name: group
+    type: float8
+    description: "Номер группы"
+    synonyms_ru: ["группа"]
+    null_semantics: "NULL = без группы"
+    
+  - name: status
+    type: enum
+    description: "Статус бронирования"
+    allowed_values: ["inProgress", "finished",  "canceled", "attended", "missed"]
+    synonyms_ru: ["статус", "состояние"]
+    business_notes: "inProgress = в прогрессе, cancelled = отменено, missed = не явился, attended = посетил, finished = завершено"
+    
+  - name: type
+    type: enum
+    description: "Тип бронирования"
+    allowed_values: ["regular", "trial", "makeup", "special"]
+    synonyms_ru: ["тип"]
+    business_notes: "regular = обычное, trial = пробное, makeup = отработка"
+    
+  - name: tickettype
+    type: enum
+    description: "Тип билета/абонемента использованного для записи"
+    synonyms_ru: ["тип билета", "тип абонемента"]
+    
+  - name: identifier
+    type: text
+    description: "Уникальный идентификатор записи (внешний ID)"
+    null_semantics: "NULL = не имеет внешнего идентификатора"
+    
+  - name: eventstationid
+    type: text
+    description: "Составной ID события и станции"
+    business_notes: "Используется для группировки по событиям на конкретной станции"
+    
+  - name: cyclecount
+    type: float8
+    description: "Номер цикла/периода"
+    synonyms_ru: ["цикл", "период"]
+    null_semantics: "NULL = не применимо"
+    
+  - name: expiryticket
+    type: varchar(24)
+    description: "ID использованного разового билета"
+    null_semantics: "NULL = билет не использовался"
+    
+  - name: marathonevent
+    type: varchar(24)
+    role: FK
+    ref: olap_schema.usermarathonevent.marathonevent
+    description: "ID события марафона (если запись в рамках марафона)"
+    synonyms_ru: ["марафон"]
+    null_semantics: "NULL = не связано с марафоном"
+    
+  - name: isfirstclass
+    type: bool
+    description: "Является ли это первым занятием пользователя"
+    synonyms_ru: ["первое занятие", "первая тренировка"]
+    business_notes: "true = первое занятие пользователя"
+    
+  - name: created_at
+    type: timestamp
+    description: "Дата и время создания бронирования (Asia/Almaty)"
+    synonyms_ru: ["дата создания", "время записи", "когда записался"]
+    
+  - name: updated_at
+    type: timestamp
+    description: "Дата и время последнего обновления бронирования"
+    synonyms_ru: ["дата обновления", "последнее изменение"]
+    
+
+business_rules:
+  - "Активные бронирования: WHERE status = 'inProgress' "
+  - "Отмененные: WHERE status = 'cancelled' OR is_dropped = true"
+  - "Первые занятия: WHERE isfirstclass = true"
+  - "Записи в рамках марафона: WHERE marathonevent IS NOT NULL"
+  - "Записи с использованием билета: WHERE expiryticket IS NOT NULL"
+  - "Записи за период: WHERE created_at BETWEEN date1 AND date2"
+
+tests:
+  - "unique(id)"
+  - "not_null(id, user, created_at)"
+  - "relationships(user, olap_schema.userheropass, user)"
+
+pii: false

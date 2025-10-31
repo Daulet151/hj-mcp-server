@@ -1,0 +1,141 @@
+table: olap_schema.event
+description: "События и тренировки в клубах Hero's Journey"
+grain: "id (одно событие = одна тренировка/занятие)"
+freshness_sla_hours: 1
+timezone: "Asia/Almaty"
+
+columns:
+  - name: id
+    type: varchar(24)
+    role: PK
+    description: "Уникальный идентификатор события/тренировки"
+    null_semantics: "NOT NULL"
+    
+  - name: starttime
+    type: timestamp
+    description: "Запланированное время начала тренировки (Asia/Almaty)"
+    synonyms_ru: ["время начала", "начало тренировки", "старт"]
+    business_notes: "Время из расписания, когда тренировка должна начаться"
+    
+  - name: endtime
+    type: timestamp
+    description: "Запланированное время окончания тренировки (Asia/Almaty)"
+    synonyms_ru: ["время окончания", "конец тренировки", "финиш"]
+    business_notes: "Время из расписания, когда тренировка должна закончиться"
+    
+  - name: startedtime
+    type: timestamp
+    description: "Фактическое время начала тренировки (Asia/Almaty)"
+    synonyms_ru: ["фактически началась", "реально стартовала"]
+    null_semantics: "NULL = тренировка еще не началась"
+    business_notes: "Время когда тренер фактически запустил тренировку"
+    
+  - name: finishedtime
+    type: timestamp
+    description: "Фактическое время завершения тренировки (Asia/Almaty)"
+    synonyms_ru: ["фактически закончилась", "реально завершилась"]
+    null_semantics: "NULL = тренировка еще не завершена"
+    business_notes: "Время когда тренер фактически завершил тренировку"
+    
+  - name: pausestartedtime
+    type: timestamp
+    description: "Время начала паузы во время тренировки"
+    synonyms_ru: ["начало паузы"]
+    null_semantics: "NULL = пауза не была взята"
+    
+  - name: totalpausetime
+    type: float8
+    description: "Общая длительность пауз во время тренировки"
+    units: "минуты"
+    synonyms_ru: ["время паузы", "длительность паузы"]
+    null_semantics: "NULL или 0 = без пауз"
+    
+  - name: status
+    type: text
+    description: "Статус тренировки"
+    allowed_values: ["scheduled", "ongoing", "completed", "cancelled", "paused"]
+    synonyms_ru: ["статус", "состояние"]
+    business_notes: |
+      scheduled = запланирована (еще не началась)
+      ongoing = идет в данный момент
+      paused = на паузе
+      completed = завершена
+      cancelled = отменена
+    
+  - name: limitstation
+    type: float8
+    description: "Лимит мест/станций на тренировке"
+    synonyms_ru: ["лимит участников", "максимум мест", "вместимость"]
+    business_notes: "Максимальное количество участников, которые могут записаться"
+    
+  - name: programset
+    type: varchar(24)
+    description: "ID набора программ"
+    synonyms_ru: ["программа", "сет программ"]
+    
+  - name: programset_name
+    type: text
+    description: "Название программы/сета"
+    synonyms_ru: ["название программы", "тип тренировки"]
+    business_notes: "Может содержать названия типа Build I, Burn II, Athlete III и т.д."
+    
+  - name: programset_type
+    type: enum
+    description: "Тип программного сета"
+    allowed_values: ["regular", "special", "trial", "individual"]
+    synonyms_ru: ["тип программы"]
+    business_notes: |
+      regular = обычная программа
+      special = специальная программа (Summer Camp, Hero's Challenge)
+      trial = триальная программа (Hero's Week, Basecamp)
+      individual = индивидуальная программа
+    
+  - name: trainer
+    type: varchar(24)
+    description: "ID тренера, проводящего тренировку"
+    synonyms_ru: ["тренер", "инструктор", "коуч"]
+    null_semantics: "NULL = тренер не назначен"
+    
+  - name: club
+    type: varchar(24)
+    role: FK
+    description: "ID клуба, где проходит тренировка"
+    synonyms_ru: ["клуб", "филиал", "точка"]
+    
+  - name: zone
+    type: varchar(24)
+    description: "ID зоны/станции в клубе"
+    synonyms_ru: ["зона", "станция", "площадка"]
+    null_semantics: "NULL = зона не указана"
+    business_notes: "Конкретная зона/станция внутри клуба где проходит тренировка"
+    
+  - name: created_at
+    type: timestamp
+    description: "Дата и время создания записи о событии (Asia/Almaty)"
+    synonyms_ru: ["дата создания"]
+    
+  - name: updated_at
+    type: timestamp
+    description: "Дата и время последнего обновления события"
+    synonyms_ru: ["дата обновления"]
+
+business_rules:
+  - "Запланированные тренировки: WHERE status = 'scheduled' AND starttime > NOW()"
+  - "Текущие тренировки: WHERE status = 'ongoing'"
+  - "Завершенные тренировки: WHERE status = 'completed' AND finishedtime IS NOT NULL"
+  - "Отмененные тренировки: WHERE status = 'cancelled'"
+  - "Тренировки за период: WHERE starttime BETWEEN date1 AND date2"
+  - "Свободные места на тренировке: limitstation - COUNT(bookings WHERE status='confirmed')"
+  - "Длительность тренировки: finishedtime - startedtime - COALESCE(totalpausetime, 0)"
+  - "Опоздание начала: startedtime - starttime (если положительное)"
+  - "Тренировки конкретного тренера: WHERE trainer = 'trainer_id'"
+  - "Тренировки в клубе: WHERE club = 'club_id'"
+
+tests:
+  - "unique(id)"
+  - "not_null(id, starttime, club)"
+  - "check(endtime >= starttime)"
+  - "check(limitstation > 0)"
+  - "accepted_values(status, ['scheduled', 'ongoing', 'completed', 'cancelled', 'paused'])"
+
+pii: false

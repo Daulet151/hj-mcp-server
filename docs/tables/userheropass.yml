@@ -1,0 +1,112 @@
+table: olap_schema.userheropass
+description: "Информация о пользователях и их абонементах (HeroPass)"
+grain: "user (один пользователь может иметь несколько записей по историческим абонементам)"
+freshness_sla_hours: 1
+timezone: "Asia/Almaty"
+
+columns:
+  - name: "user"
+    type: varchar(24)
+    role: FK
+    description: "ID Юзер/Атлет/Пользователь в системе"
+    null_semantics: "NOT NULL"
+    
+  - name: class
+    type: varchar(24)
+    description: "класс юзера"
+    allowed_values: ["A", "B", "C", "D"]
+
+  - name: username
+    type: text
+    description: "Логин пользователя в системе"
+    
+  - name: firstname
+    type: text
+    description: "Имя пользователя"
+    synonyms_ru: ["имя"]
+    
+  - name: lastname
+    type: text
+    description: "Фамилия пользователя"
+    synonyms_ru: ["фамилия"]
+    
+  - name: email
+    type: text
+    description: "Email адрес пользователя"
+    pii: true
+    
+  - name: phonenumber
+    type: text
+    description: "Номер телефона пользователя"
+    pii: true
+
+  - name: userheropass
+    type: varchar(24)
+    role: PK
+    description: "Уникальный ID записи абонемента пользователя"
+    
+  - name: heropass
+    type: varchar(24)
+    role: FK
+    description: "ID абонемента"
+    
+  - name: hp_name
+    type: text
+    description: "Название абонемента"
+    allowed_values: 
+      - "Полугодовой Hero's Pass"
+      - "Годовой Hero's Pass"
+    synonyms_ru: ["абонемент", "хиропасс", "heropass"]
+    
+  - name: hp_starttime
+    type: timestamp
+    description: "Дата и время начала действия абонемента (Asia/Almaty)"
+    synonyms_ru: ["начало абонемента", "дата активации"]
+    
+  - name: hp_endtime
+    type: timestamp
+    description: "Дата и время окончания абонемента (Asia/Almaty)"
+    synonyms_ru: ["конец абонемента", "истечение абонемента", "дата окончания"]
+    business_notes: "Используется для поиска истекающих/просроченных абонементов"
+    
+  - name: hp_startfreezingday
+    type: timestamp
+    description: "Начало периода заморозки абонемента"
+    null_semantics: "NULL = заморозка не применялась"
+    
+  - name: hp_endfreezingday
+    type: timestamp
+    description: "Конец периода заморозки абонемента"
+    null_semantics: "NULL = заморозка не применялась"
+    
+  - name: status
+    type: text
+    description: "Текущий статус абонемента"
+    allowed_values: ["active", "not-active"]
+    synonyms_ru: ["статус", "состояние абонемента"]
+  
+  - name: freezing_status
+    type: text
+    description: "Статус заморозки абонемента"
+    allowed_values: ["active", "not_active"]
+    synonyms_ru: ["статус заморозки", "состояние заморозки"]
+
+  - name: club
+    type: varchar(24)
+    description: "ID клуба, к которому привязан абонемент"
+    synonyms_ru: ["клуб"]
+
+  - name: club_name
+    type: text
+    description: "Название клуба, к которому привязан абонемент"
+    synonyms_ru: ["название клуба", "наименование клуба"]
+
+business_rules:
+  - "Истекающий абонемент: hp_endtime BETWEEN NOW() AND NOW() + INTERVAL '7 days' AND status = 'active'"
+  - "Просроченный абонемент: hp_endtime < NOW() AND status != 'expired'"
+  - "Заморожен: status = 'frozen' OR (hp_startfreezingday IS NOT NULL AND NOW() BETWEEN hp_startfreezingday AND hp_endfreezingday)"
+
+tests:
+  - "unique(user, userheropass)"
+  - "not_null(user, email)"
+  - "accepted_values(status, ['active', 'not_active'])"

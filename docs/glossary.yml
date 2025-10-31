@@ -1,0 +1,214 @@
+business_terms:
+  - canonical: "Абонемент"
+    synonyms_ru: ["хиропасс", "heropass", "подписка", "пропуск"]
+    entity: heropass
+    examples: ["Полугодовой Hero's Pass", "Годовой Hero's Pass"]
+    
+  - canonical: "Триальщик"
+    synonyms_ru: ["триальный пользователь", "на пробном периоде", "тестовый юзер"]
+    definition: "Пользователь, проходящий Hero's Week, Basecamp или Первый Шаг без активного HeroPass"
+    sql_logic: "LEFT JOIN ... WHERE heropass IS NULL AND marathon_name IN (...)"
+    
+  - canonical: "Истекающий абонемент"
+    synonyms_ru: ["заканчивающийся абонемент", "скоро закончится", "истекает"]
+    definition: "Абонемент с датой окончания в ближайшие 7 дней"
+    sql_logic: "hp_endtime BETWEEN NOW() AND NOW() + INTERVAL '7 days'"
+
+  - canonical: "Чекин"
+    synonyms_ru: ["посещение", "регистрация на тренировку", "отметка о приходе"]
+    definition: "Запись о посещении пользователем тренировки или события"
+    sql_logic: "Записи в таблице usercheckin, связанные с пользователем и событием"
+
+
+program_name_mappings:
+  # Build серия
+  - canonical: "Build I"
+    synonyms: ["Билд 1", "Берн 1", "Build 1", "билд один", "build первый"]
+    
+  - canonical: "Build II"
+    synonyms: ["Билд 2", "Build 2", "билд два", "build второй"]
+    
+  - canonical: "Build III"
+    synonyms: ["Билд 3", "Build 3", "билд три", "build третий"]
+    
+  - canonical: "Build IV"
+    synonyms: ["Билд 4", "Build 4", "билд четыре", "build четвертый"]
+    
+  - canonical: "Build Extreme"
+    synonyms: ["Билд Экстрим", "Build экстрим", "билд extreme"]
+  
+  # Burn серия
+  - canonical: "Burn I"
+    synonyms: ["Берн 1", "Бёрн 1", "Burn 1", "берн один", "burn первый"]
+    
+  - canonical: "Burn II"
+    synonyms: ["Берн 2", "Бёрн 2", "Burn 2", "берн два", "burn второй"]
+    
+  - canonical: "Burn III"
+    synonyms: ["Берн 3", "Бёрн 3", "Burn 3", "берн три", "burn третий"]
+    
+  - canonical: "Burn IV"
+    synonyms: ["Берн 4", "Бёрн 4", "Burn 4", "берн четыре", "burn четвертый"]
+    
+  - canonical: "Burn Extreme"
+    synonyms: ["Берн Экстрим", "Бёрн Экстрим", "Burn экстрим"]
+  
+  # Athlete серия
+  - canonical: "Athlete I"
+    synonyms: ["Атлет 1", "Athlete 1", "атлет один"]
+    
+  - canonical: "Athlete II"
+    synonyms: ["Атлет 2", "Athlete 2", "атлет два"]
+    
+  - canonical: "Athlete III"
+    synonyms: ["Атлет 3", "Athlete 3", "атлет три"]
+    
+  - canonical: "Athlete IV"
+    synonyms: ["Атлет 4", "Athlete 4", "атлет четыре"]
+    
+  - canonical: "Athlete Extreme"
+    synonyms: ["Атлет Экстрим", "Athlete экстрим"]
+  
+  # Fit body серия
+  - canonical: "Fit body I"
+    synonyms: ["Фит боди 1", "Фитбоди 1", "Fit body 1"]
+    
+  - canonical: "Fit body II"
+    synonyms: ["Фит боди 2", "Фитбоди 2", "Fit body 2"]
+    
+  - canonical: "Fit body III"
+    synonyms: ["Фит боди 3", "Фитбоди 3", "Fit body 3"]
+    
+  - canonical: "Fit body IV"
+    synonyms: ["Фит боди 4", "Фитбоди 4", "Fit body 4"]
+    
+  - canonical: "Fit body Extreme"
+    synonyms: ["Фит боди Экстрим", "Фитбоди экстрим"]
+  
+  # Fit body Reshape серия
+  - canonical: "Fit body Reshape I"
+    synonyms: ["Фит боди Решейп 1", "Fit body reshape 1"]
+    
+  - canonical: "Fit body Reshape II"
+    synonyms: ["Фит боди Решейп 2", "Fit body reshape 2"]
+    
+  - canonical: "Fit body Reshape III"
+    synonyms: ["Фит боди Решейп 3", "Fit body reshape 3"]
+    
+  - canonical: "Fit body Reshape IV"
+    synonyms: ["Фит боди Решейп 4", "Fit body reshape 4"]
+    
+  - canonical: "Fit body Reshape Extreme"
+    synonyms: ["Фит боди Решейп Экстрим"]
+  
+  # Legs & Glutes серия
+  - canonical: "Legs & Glutes I"
+    synonyms: ["Легс энд Глютс 1", "Legs and Glutes 1", "Legs Glutes 1"]
+    
+  - canonical: "Legs & Glutes II"
+    synonyms: ["Легс энд Глютс 2", "Legs and Glutes 2", "Legs Glutes 2"]
+    
+  - canonical: "Legs & Glutes III"
+    synonyms: ["Легс энд Глютс 3", "Legs and Glutes 3", "Legs Glutes 3"]
+    
+  - canonical: "Legs & Glutes IV"
+    synonyms: ["Легс энд Глютс 4", "Legs and Glutes 4", "Legs Glutes 4"]
+    
+  - canonical: "Legs & Glutes Extreme"
+    synonyms: ["Легс энд Глютс Экстрим", "Legs and Glutes Extreme"]
+  
+  # Триальные программы
+  - canonical: "Hero's Week"
+    synonyms: ["Хироз Вик", "Heroes Week", "Hero Week", "хироу вик"]
+    
+  - canonical: "Basecamp"
+    synonyms: ["Бейскамп", "Базкамп", "BaseCamp", "Base Camp"]
+    
+  - canonical: "Первый шаг"
+    synonyms: ["первый шаг", "Первый Шаг", "1 шаг"]
+    
+  - canonical: "Индивидуальный первый шаг"
+    synonyms: ["индивидуальный первый шаг", "инд первый шаг"]
+  
+  # Специальные
+  - canonical: "Summer Camp"
+    synonyms: ["Саммер Камп", "summer camp", "летний лагерь"]
+    
+  - canonical: "Hero's Challenge"
+    synonyms: ["Хироз Челлендж", "Heroes Challenge", "Hero Challenge"]
+    
+  - canonical: "Freestyle"
+    synonyms: ["Фристайл", "free style"]
+    
+  - canonical: "Индивидуальная программа"
+    synonyms: ["индивидуальная программа", "инд программа", "индивидуальная"]
+
+
+club_name_mappings:
+  description: "Маппинг названий клубов/филиалов на канонические значения"
+  
+  mappings:
+    - canonical: "HJ Promenade"
+      synonyms: 
+        - "Променад"
+        - "Promenade"
+        - "promenade"
+        - "HJ Променад"
+        - "Эйч Джей Променад"
+        - "Heroes Journey Promenade"
+        - "хж променад"
+        - "промик"
+        - "Promen"
+      
+    - canonical: "HJ Colibri"
+      synonyms:
+        - "Колибри"
+        - "Colibri"
+        - "colibri"
+        - "HJ Колибри"
+        - "Эйч Джей Колибри"
+        - "Heroes Journey Colibri"
+        - "хж колибри"
+        - "Калибри"
+        - "Колібрі"
+      
+    - canonical: "HJ Nurly Orda"
+      synonyms:
+        - "Нурлы Орда"
+        - "Nurly Orda"
+        - "nurly orda"
+        - "HJ Нурлы Орда"
+        - "Эйч Джей Нурлы Орда"
+        - "Heroes Journey Nurly Orda"
+        - "хж нурлы орда"
+        - "Нұрлы Орда"
+        - "Нурла"
+        - "НО"
+        - "Nurly"
+      
+    - canonical: "HJ Villa"
+      synonyms:
+        - "Вилла"
+        - "Villa"
+        - "villa"
+        - "HJ Вилла"
+        - "Эйч Джей Вилла"
+        - "Heroes Journey Villa"
+        - "хж вилла"
+        - "Виллочка"
+      
+    - canonical: "HJ Europe City"
+      synonyms:
+        - "Европа Сити"
+        - "Europe City"
+        - "europe city"
+        - "HJ Европа Сити"
+        - "Эйч Джей Европа Сити"
+        - "Heroes Journey Europe City"
+        - "хж европа сити"
+        - "Европа"
+        - "ЕС"
+        - "EC"
+        - "Europe"
+        - "Europark"
+        - "Европарк"

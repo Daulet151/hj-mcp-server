@@ -1,0 +1,37 @@
+id: q2sql_009
+question_ru: "Покажи всех пользователей которые записались на триальные продкуты с начало июля через реферальный код, и их конверсию в Хиропасс" 
+intents: ["Рефеарльный код"]
+
+
+sql:
+  dialect: postgres
+  statement: |
+     with fv as (
+      select *
+      from olap_schema.usermarathonevent 
+      where marathon_name in ('Hero''s Week', 'Первый шаг', 'Basecamp') and me_startttime >= '2025-07-01' and (shareduser is not null) and user_created_at >= '2025-07-01'
+      ),
+      sv as (
+      select * 
+      from olap_schema.userheropass
+      where hp_starttime >= '2025-07-01'
+      ),
+      tv as (
+      select fv."user", marathon_name, me_startttime, me_endtime, userheropass, hp_starttime, hp_endtime 
+      from fv 
+      left join sv on fv."user" = sv."user" and me_endtime < hp_starttime 
+      )
+      select marathon_name, date_trunc('month', me_startttime), count(distinct "user"), count(distinct userheropass) as cnt_converted_hp
+      from tv 
+      group by 1,2
+
+
+expected_schema:  
+  - name: marathon_name
+    type: text
+  - name: date_trunc
+    type: timestamp
+  - name: count
+    type: int64
+  - name: cnt_converted_hp
+    type: int64

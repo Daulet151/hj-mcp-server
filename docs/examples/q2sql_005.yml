@@ -1,0 +1,46 @@
+id: q2sql_005
+question_ru: "Покажи всех дейсвующих триальщиков кто не делал букингm нужно дополнительно вывести колонку с временем оплаты марафона" 
+intents: ["current_trial_users"]
+assumptions:
+  - "Триальщик = пользователь на марафоне Hero's Week/Basecamp/Первый шаг БЕЗ активного HeroPass"
+
+sql:
+  dialect: postgres
+  statement: |
+    SELECT DISTINCT
+        m."user",
+        m.phonenumber,
+        m.marathon_name,
+        m.me_startttime,
+        m.me_endtime,
+        up.created_at as payment_time
+    FROM olap_schema.usermarathonevent m
+    LEFT JOIN olap_schema.userheropass u 
+      ON 
+      m."user" = u."user" 
+      and m.me_endtime >= u.hp_starttime 
+      and m.me_endtime <= u.hp_endtime 
+      and u.status = 'active'
+    LEFT JOIN booking b 
+      ON b."user" = m."user"
+    LEFT JOIN olap_schema.userpayment up 
+      ON up."user" = m."user"
+      AND m.marathonevent = up.marathonevent
+    WHERE m.marathon_name IN ('Hero''s Week', 'Basecamp', 'Первый шаг', 'Индивидуальная программа')
+    AND u.heropass IS NULL
+    AND b."user" IS NULL
+    AND me_startttime <= NOW() 
+    AND me_endtime >= NOW()
+    ORDER BY m.me_startttime DESC;
+
+expected_schema:
+  - name: user
+    type: varchar(24)
+  - name: phonenumber
+    type: text 
+  - name: marathon_name
+    type: text
+  - name: me_startttime
+    type: timestamp
+  - name: me_endtime
+    type: timestamp

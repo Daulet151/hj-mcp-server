@@ -1,0 +1,39 @@
+id: q2sql_006
+question_ru: "Покажи всех пользователей, у которых закончился абонемент в июле 2025 года и кого есть активный абонемент. Выведи айдишку юзера, имю, фамилию ,название клуба, дату начало и окончания абонемента и номер телефона" 
+intents: ["current_hp_holders_and_users_whose_hp_ends_in_july_2025"]
+assumptions:
+  - "Активный абонемент = статус 'active'"
+  - "Абонемент, который закончится в июле 2025 года = hp_endtime между '2025-07-01' и '2025-08-01'" 
+
+sql:
+  dialect: postgres
+  statement: |
+    SELECT DISTINCT
+        u."user",
+        firstname,
+        lastname,
+        club_name,
+        hp_starttime,
+        hp_endtime,
+        phonenumber,
+        status
+    FROM olap_schema.userheropass u 
+    WHERE u.status = 'active' OR (u.hp_endtime >= '2025-07-01' AND u.hp_endtime < '2025-08-01')
+
+expected_schema:
+  - name: user
+    type: varchar(24)
+  - name: firstname
+    type: text  
+  - name: lastname
+    type: text  
+  - name: club_name
+    type: text  
+  - name: phonenumber
+    type: text 
+  - name: hp_startttime
+    type: timestamp
+  - name: hp_endtime
+    type: timestamp
+  - name: status
+    type: text

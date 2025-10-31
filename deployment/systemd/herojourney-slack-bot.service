@@ -1,0 +1,32 @@
+[Unit]
+Description=Hero's Journey Slack Bot - SQL Assistant
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/select_bot_service
+Environment="PATH=/opt/select_bot_service/venv/bin"
+EnvironmentFile=/opt/select_bot_service/.env
+ExecStart=/opt/select_bot_service/venv/bin/python /opt/select_bot_service/app.py
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=herojourney-slack-bot
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/select_bot_service/logs
+
+[Install]
+WantedBy=multi-user.target

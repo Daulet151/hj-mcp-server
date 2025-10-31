@@ -1,0 +1,287 @@
+table: olap_schema.userpayment
+description: "Платежи пользователей за абонементы, марафоны и другие услуги"
+grain: "id (один платеж = одна запись)"
+freshness_sla_hours: 1
+timezone: "Asia/Almaty"
+
+columns:
+  - name: id
+    type: varchar(24)
+    role: PK
+    description: "Уникальный идентификатор платежа"
+    null_semantics: "NOT NULL"
+    
+  - name: "user"
+    type: varchar(24)
+    role: FK
+    description: "ID пользователя, совершившего платеж"
+    synonyms_ru: ["пользователь", "плательщик", "клиент", "атлет", "юзер"]
+    
+  - name: class
+    type: varchar(24)
+    description: "класс юзера"
+    allowed_values: ["A", "B", "C", "D"]
+
+  - name: username
+    type: text
+    description: "Логин пользователя в системе"
+    
+  - name: firstname
+    type: text
+    description: "Имя пользователя"
+    synonyms_ru: ["имя"]
+    
+  - name: lastname
+    type: text
+    description: "Фамилия пользователя"
+    synonyms_ru: ["фамилия"]
+    
+  - name: email
+    type: text
+    description: "Email адрес пользователя"
+    pii: true
+
+  - name: sex
+    type: enum
+    description: "Пол пользователя"
+    allowed_values: ["male", "female"]
+    synonyms_ru: ["пол"]  
+
+  - name: phonenumber
+    type: text
+    description: "Номер телефона пользователя"
+    pii: true
+
+  - name: payment
+    type: varchar(24)
+    description: "ID платежной транзакции"
+    synonyms_ru: ["транзакция", "платеж"]
+    
+  - name: type
+    type: enum
+    description: "Тип платежа"
+    allowed_values: ["heropass_purchase", "marathon_purchase", "renewal", "refund", "transfer"]
+    synonyms_ru: ["тип платежа", "категория"]
+    business_notes: "heropass_purchase = покупка абонемента, marathon_purchase = покупка марафона, refund = возврат"
+    
+  - name: marathonevent
+    type: varchar(24)
+    role: FK
+    ref: olap_schema.usermarathonevent.marathonevent
+    description: "ID события марафона (если платеж за марафон)"
+    synonyms_ru: ["марафон"]
+    null_semantics: "NULL = не оплата марафона"
+    
+  - name: heropass
+    type: varchar(24)
+    role: FK
+    ref: olap_schema.userheropass.heropass
+    description: "ID абонемента (если платеж за HeroPass)"
+    synonyms_ru: ["абонемент", "хиропасс"]
+    null_semantics: "NULL = не оплата абонемента"
+    
+  - name: recurrentpayment
+    type: varchar(24)
+    description: "ID рекуррентного платежа (для автоплатежей)"
+    synonyms_ru: ["автоплатеж", "подписка"]
+    null_semantics: "NULL = не рекуррентный платеж"
+    
+  - name: productdetails
+    type: text
+    description: "Детали продукта в формате JSON или текста"
+    synonyms_ru: ["детали", "описание продукта"]
+    
+  - name: transferedmarathonevent
+    type: varchar(24)
+    description: "ID марафона при переносе"
+    null_semantics: "NULL = не перенос"
+    
+  - name: salesman
+    type: varchar(24)
+    description: "ID менеджера по продажам"
+    synonyms_ru: ["менеджер", "продавец", "sales"]
+    null_semantics: "NULL = продажа без менеджера"
+    
+  - name: receptionist
+    type: varchar(24)
+    description: "ID администратора, оформившего платеж"
+    synonyms_ru: ["администратор", "ресепшн"]
+    null_semantics: "NULL = оформлено онлайн"
+    
+  - name: club
+    type: varchar(24)
+    description: "ID клуба, где был совершен платеж"
+    synonyms_ru: ["клуб", "филиал", "точка продажи"]
+    
+  - name: user_club
+    type: varchar(24)
+    description: "ID клуба к которому привязан пользователь"
+    
+  - name: club_name
+    type: text
+    description: "Название клуба к которому привязан пользователь"
+
+  - name: discount
+    type: float8
+    description: "Размер скидки (в процентах или абсолютном значении)"
+    units: "% или KZT"
+    synonyms_ru: ["скидка", "дисконт"]
+    null_semantics: "NULL или 0 = без скидки"
+    
+  - name: name
+    type: text
+    description: "Тип покупки марафона или абонемента"
+    synonyms_ru: ["название", "продукт","абонемент", "марафон"]
+    
+  - name: paymentmethod
+    type: enum
+    description: "Метод оплаты"
+    allowed_values: ["cash", "card", "online", "transfer", "credit", "mixed"]
+    synonyms_ru: ["способ оплаты", "метод оплаты"]
+    business_notes: "cash = наличные, card = карта, online = онлайн, mixed = смешанный"
+    
+  - name: paidamount
+    type: float8
+    description: "Сумма, которую должен был заплатить клиент"
+    units: "KZT"
+    synonyms_ru: ["к оплате", "стоимость", "цена"]
+    
+  - name: receivedamount
+    type: float8
+    description: "Сумма, фактически полученная от клиента"
+    units: "KZT"
+    synonyms_ru: ["получено", "оплачено"]
+    business_notes: "Может отличаться от paidamount из-за частичной оплаты"
+    
+  - name: cost
+    type: float8
+    description: "Себестоимость продукта/услуги"
+    units: "KZT"
+    synonyms_ru: ["себестоимость"]
+    null_semantics: "NULL = себестоимость не указана"
+    
+  - name: checklink
+    type: text
+    description: "Ссылка на чек/квитанцию"
+    synonyms_ru: ["чек", "квитанция"]
+    null_semantics: "NULL = чек не сформирован"
+    
+  - name: checkid
+    type: float8
+    description: "ID чека в системе"
+    null_semantics: "NULL = чек не сформирован"
+    
+  - name: companybin
+    type: text
+    description: "БИН компании для юридических лиц"
+    synonyms_ru: ["БИН", "ИИН компании"]
+    null_semantics: "NULL = физическое лицо"
+    pii: true
+    
+  - name: cashamount
+    type: float8
+    description: "Сумма оплаты наличными"
+    units: "KZT"
+    synonyms_ru: ["наличные"]
+    null_semantics: "NULL или 0 = не использовались наличные"
+    
+  - name: cardamount
+    type: float8
+    description: "Сумма оплаты картой"
+    units: "KZT"
+    synonyms_ru: ["картой", "по карте"]
+    null_semantics: "NULL или 0 = не использовалась карта"
+    
+  - name: creditamount
+    type: float8
+    description: "Сумма оплаты в кредит/рассрочку"
+    units: "KZT"
+    synonyms_ru: ["кредит", "рассрочка"]
+    null_semantics: "NULL или 0 = без кредита"
+    
+  - name: comment
+    type: text
+    description: "Комментарий к платежу"
+    synonyms_ru: ["комментарий", "примечание", "заметка"]
+    
+  - name: userheropass
+    type: varchar(24)
+    role: FK
+    ref: olap_schema.userheropass.userheropass
+    description: "ID связки пользователь-абонемент"
+    null_semantics: "NULL = не связано с абонементом"
+    
+  - name: status
+    type: enum
+    description: "Статус платежа"
+    allowed_values: ["regular", "refunded", "reRegistered"]
+    synonyms_ru: ["статус"]
+    business_notes: "completed = успешно, refunded = возвращен, reRegistered = переоформление"
+    
+  - name: refundlettertime
+    type: timestamp
+    description: "Дата и время письма о возврате"
+    synonyms_ru: ["дата возврата", "время возврата"]
+    null_semantics: "NULL = возврат не производился"
+    
+  - name: refundletterurl
+    type: text
+    description: "Ссылка на письмо/документ о возврате"
+    null_semantics: "NULL = документ о возврате отсутствует"
+    
+  - name: reregisteredtime
+    type: timestamp
+    description: "Дата и время перерегистрации"
+    synonyms_ru: ["дата перерегистрации"]
+    null_semantics: "NULL = перерегистрация не выполнялась"
+    
+  - name: fromuser
+    type: varchar(24)
+    description: "ID пользователя, от которого произведен перенос"
+    null_semantics: "NULL = не перенос между пользователями"
+    
+  - name: touser
+    type: varchar(24)
+    description: "ID пользователя, на которого произведен перенос"
+    null_semantics: "NULL = не перенос между пользователями"
+    
+  - name: previousclub
+    type: varchar(24)
+    description: "ID предыдущего клуба (при переносе между клубами)"
+    null_semantics: "NULL = перенос не производился"
+    
+  - name: created_at
+    type: timestamp
+    description: "Дата и время оплаты (Asia/Almaty)"
+    synonyms_ru: ["дата платежа", "время оплаты", "когда оплатил"]
+    
+  - name: updated_at
+    type: timestamp
+    description: "Дата и время последнего обновления платежа"
+    synonyms_ru: ["дата обновления"]
+    
+  - name: is_dropped
+    type: bool
+    description: "Был ли платеж отменен/удален"
+    synonyms_ru: ["отменен", "удален"]
+    business_notes: "true = платеж отменен или удален из системы"
+
+business_rules:
+  - "Успешные платежи: WHERE status = 'completed' AND is_dropped = false"
+  - "Возвраты: WHERE status = 'refunded' OR refundlettertime IS NOT NULL"
+  - "Платежи за абонементы: WHERE heropass IS NOT NULL"
+  - "Платежи за марафоны: WHERE marathonevent IS NOT NULL"
+  - "Выручка: SUM(receivedamount) WHERE status = 'completed' AND is_dropped = false"
+  - "Маржа: SUM(receivedamount - cost) WHERE status = 'completed'"
+  - "Смешанные платежи: WHERE paymentmethod = 'mixed' OR (cashamount > 0 AND cardamount > 0)"
+  - "Платежи через менеджера: WHERE salesman IS NOT NULL"
+  - "Платежи за период: WHERE created_at BETWEEN date1 AND date2"
+
+tests:
+  - "unique(id)"
+  - "not_null(id, user, created_at)"
+  - "relationships(user, olap_schema.userheropass, user)"
+  - "check(receivedamount >= 0)"
+  - "check(paidamount >= 0)"
+
+pii: true  # companybin может содержать персональные данные

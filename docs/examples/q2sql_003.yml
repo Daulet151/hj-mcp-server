@@ -1,0 +1,36 @@
+id: q2sql_003
+question_ru: "Покажи всех дейсвующих триальщиков"
+intents: ["current_trial_users"]
+assumptions:
+  - "Триальщик = пользователь на марафоне Hero's Week/Basecamp/Первый шаг БЕЗ активного HeroPass"
+
+sql:
+  dialect: postgres
+  statement: |
+    SELECT DISTINCT
+        m.user,
+        m.marathon_name,
+        m.me_startttime,
+        m.me_endtime
+    FROM olap_schema.usermarathonevent m
+    LEFT JOIN olap_schema.userheropass u 
+      ON 
+      m.user = u.user 
+      and m.me_endtime >= u.hp_starttime 
+      and m.me_endtime <= u.hp_endtime 
+      and u.status = 'active'
+    WHERE m.marathon_name IN ('Hero''s Week', 'Basecamp', 'Первый шаг', 'Индивидуальная программа')
+    AND u.heropass IS NULL
+    AND me_startttime <= NOW() 
+    AND me_endtime >= NOW()
+    ORDER BY m.me_startttime DESC;
+
+expected_schema:
+  - name: user
+    type: varchar(24)
+  - name: marathon_name
+    type: text
+  - name: me_startttime
+    type: timestamp
+  - name: me_endtime
+    type: timestamp

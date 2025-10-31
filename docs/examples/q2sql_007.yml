@@ -1,0 +1,41 @@
+id: q2sql_007
+question_ru: "Выведи всех юзеров которые записаны на программу фит боди ришэйп 1" 
+intents: ["Вывод юзеров по опрделенному марафону"]
+
+
+sql:
+  dialect: postgres
+  statement: |
+    SELECT DISTINCT
+    m."user",
+    m.firstname,
+    m.lastname,
+    m.club_name,
+    m.phonenumber,
+    m.marathon_name,
+    m.me_startttime,
+    m.me_endtime
+    FROM 
+        olap_schema.usermarathonevent m
+    WHERE 
+        m.marathon_name = 'Fit body Reshape I'
+        AND m.me_startttime <= NOW() 
+        AND m.me_endtime >= NOW()
+
+expected_schema:
+  - name: user
+    type: varchar(24)
+  - name: firstname
+    type: text  
+  - name: lastname
+    type: text  
+  - name: club_name
+    type: text  
+  - name: phonenumber
+    type: text 
+  - name: marathon_name
+    type: text
+  - name: me_startttime
+    type: timestamp
+  - name: me_endtime
+    type: timestamp
