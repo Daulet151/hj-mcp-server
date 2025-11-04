@@ -4,7 +4,9 @@
       "Bash(pip install:*)",
       "Bash(taskkill:*)",
       "Bash(tasklist:*)",
-      "Bash(findstr:*)"
+      "Bash(findstr:*)",
+      "Bash(python mcp_server.py:*)",
+      "Bash(python app.py:*)"
     ],
     "deny": [],
     "ask": []

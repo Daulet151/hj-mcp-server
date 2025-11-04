@@ -1,0 +1,49 @@
+id: q2sql_010
+question_ru: "Мне нужно срочно выгрузить список атлетов, которые создали клан в течение последних 2 месяцев, но не смогли пока еще набрать 5 человек.Таблица со следующими данными: Username, имя фамилия, уровень атлета, кол-во друзей в приложении HP, телефон, домашняя студия, дата создания клана, название клана, сколько сейчас атлетов в клане." 
+intents: ["Информация"]
+
+
+sql:
+  dialect: postgres
+  statement: |
+     select clan, 
+     clan_name,
+     array_length(users, 1) as clan_user_cnt,
+     admin,
+     club_name,
+     clan_created_at, 
+     admin_firstname, 
+     admin_lastname, 
+     admin_username, 
+     admin_phonenumber, 
+     admin_level_name, 
+     admin_friends_count
+     from olap_schema.clan 
+     where array_length(users, 1) < 5 and clan_created_at >= NOW() - INTERVAL '2 months'
+
+
+expected_schema:  
+  - name: clan
+    type: varchar(24)
+  - name: clan_name
+    type: text  
+  - name: clan_user_cnt
+    type: int64
+  - name: admin
+    type: varchar(24)
+  - name: club_name
+    type: text
+  - name: clan_created_at 
+    type: timestamp
+  - name: admin_firstname
+    type: text
+  - name: admin_lastname  
+    type: text
+  - name: admin_username
+    type: text
+  - name: admin_phonenumber
+    type: text
+  - name: admin_level_name
+    type: text
+  - name: admin_friends_count
+    type: int64

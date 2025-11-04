@@ -1,0 +1,144 @@
+table: olap_schema.clan
+description: "Информация о кланах и их администраторах"
+grain: "clan (один клан = одна запись)"
+freshness_sla_hours: 24
+timezone: "Asia/Almaty"
+
+columns:
+  - name: clan
+    type: varchar(24)
+    role: PK
+    description: "Уникальный идентификатор клана"
+    null_semantics: "NOT NULL"
+
+  - name: clan_name
+    type: text
+    description: "Название клана"
+    synonyms_ru: ["название клана", "имя клана"]
+
+  - name: users
+    type: array
+    description: "Массив ID пользователей в клане"
+    synonyms_ru: ["участники клана", "члены клана", "пользователи клана"]
+
+  - name: admin
+    type: varchar(24)
+    role: FK
+    description: "ID администратора клана"
+    synonyms_ru: ["админ клана", "руководитель клана"]
+
+  - name: mentors
+    type: array
+    description: "Массив ID менторов клана"
+    synonyms_ru: ["наставники", "менторы"]
+    null_semantics: "NULL = нет менторов"
+
+  - name: club
+    type: varchar(24)
+    role: FK
+    description: "ID клуба к которому привязан клан, админ и юзера в клане"
+    synonyms_ru: ["филиал", "ID клуба"]
+
+
+  - name: club_name
+    type: varchar(24)
+    role: FK
+    description: "Название клуба к которому привязан клан, админ и юзера в клане"
+    synonyms_ru: ["филиал", "название студии", "название клуба"]
+
+  - name: clan_timeofnamechange
+    type: timestamp
+    description: "Время последнего изменения названия клана"
+    synonyms_ru: ["когда переименовали", "дата смены имени"]
+    null_semantics: "NULL = название не менялось"
+
+  - name: whatsappurl
+    type: text
+    description: "Ссылка на WhatsApp группу клана"
+    synonyms_ru: ["ссылка на группу", "чат клана"]
+    null_semantics: "NULL = нет WhatsApp группы"
+
+  - name: clan_created_at
+    type: timestamp
+    description: "Дата и время создания клана (Asia/Almaty)"
+    synonyms_ru: ["дата создания клана", "когда создан клан"]
+
+  - name: clan_updated_at
+    type: timestamp
+    description: "Дата и время последнего обновления клана"
+    synonyms_ru: ["последнее изменение клана"]
+
+  # Поля администратора клана
+  - name: admin_user
+    type: varchar(24)
+    description: "ID пользователя-администратора (дубликат поля admin)"
+
+  - name: admin_username
+    type: text
+    description: "Username администратора клана"
+    synonyms_ru: ["логин админа", "юзернейм админа"]
+
+  - name: admin_nickname
+    type: text
+    description: "Никнейм администратора клана"
+    synonyms_ru: ["ник админа"]
+    null_semantics: "NULL = никнейм не задан"
+
+  - name: admin_firstname
+    type: text
+    description: "Имя администратора клана"
+    synonyms_ru: ["имя админа"]
+
+  - name: admin_lastname
+    type: text
+    description: "Фамилия администратора клана"
+    synonyms_ru: ["фамилия админа"]
+
+  - name: admin_phonenumber
+    type: text
+    description: "Номер телефона администратора"
+    synonyms_ru: ["телефон админа", "контакт админа"]
+
+  - name: admin_email
+    type: text
+    description: "Email администратора клана"
+    synonyms_ru: ["почта админа", "емейл админа"]
+    null_semantics: "NULL = email не указан"
+
+  - name: admin_friends_count
+    type: int64
+    description: "Количество друзей администратора клана"
+    synonyms_ru: ["друзья админа"]
+
+  - name: admin_level_name
+    type: text
+    description: "Название уровня администратора"
+    synonyms_ru: ["уровень админа", "левел админа"]
+    null_semantics: "NULL = уровень не задан"
+
+business_rules:
+  - "Активные кланы: WHERE clan IS NOT NULL"
+  - "Кланы с админами: WHERE admin IS NOT NULL"
+  - "Кланы с менторами: WHERE mentors IS NOT NULL AND array_length(mentors, 1) > 0"
+  - "Кланы по клубу: WHERE club = 'club_id'"
+  - "Кланы с WhatsApp группой: WHERE whatsappurl IS NOT NULL"
+
+tests:
+  - "unique(clan)"
+  - "not_null(clan, clan_name, clan_created_at)"
+  - "relationships(admin, olap_schema.user, id)"
+  - "relationships(club, olap_schema.club, id)"
+
+pii: true
+pii_columns:
+  - admin_phonenumber
+  - admin_email
+  - admin_firstname
+  - admin_lastname
+
+notes: |
+  Таблица содержит денормализованные данные о кланах с информацией об администраторах.
+  Создана из dbt модели с LEFT JOIN на таблицы user, userfriend и level.
+
+  Для получения списка пользователей клана используйте поле users (массив ID).
+  Для получения информации о менторах используйте поле mentors (массив ID).
