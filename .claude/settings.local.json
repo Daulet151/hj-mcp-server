@@ -5,9 +5,14 @@
       "Bash(taskkill:*)",
       "Bash(tasklist:*)",
       "Bash(findstr:*)",
+<<<<<<< HEAD
       "Bash(python3.10 -m pip install:*)",
       "Bash(python3.10 mcp_server.py:*)",
       "Bash(timeout 5 python3.10:*)"
+=======
+      "Bash(python mcp_server.py:*)",
+      "Bash(python app.py:*)"
+>>>>>>> 78ff1059f332f5d319a031ba114e2a773a56f10c
     ],
     "deny": [],
     "ask": []
