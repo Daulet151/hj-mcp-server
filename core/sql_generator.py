@@ -1,6 +1,7 @@
 """
 SQL query generation using OpenAI and schema documentation.
 """
+import re
 from typing import Dict, Any
 from openai import OpenAI
 from utils.logger import setup_logger
@@ -65,11 +66,8 @@ class SQLGenerator:
 
             sql_output = response.choices[0].message.content.strip()
 
-            # Clean up code blocks
-            if sql_output.startswith("```sql"):
-                sql_output = sql_output[len("```sql"):].strip()
-            if sql_output.endswith("```"):
-                sql_output = sql_output[:-len("```")].strip()
+            # Extract SQL from markdown code blocks if present
+            sql_output = self._extract_sql_from_response(sql_output)
 
             logger.info("Generated SQL query successfully")
             logger.debug("SQL: %s", sql_output)
@@ -79,6 +77,33 @@ class SQLGenerator:
         except Exception as e:
             logger.error("Failed to generate SQL: %s", str(e))
             raise
+
+    def _extract_sql_from_response(self, response: str) -> str:
+        """
+        Extract SQL query from OpenAI response, handling markdown code blocks.
+
+        Args:
+            response: Raw response from OpenAI
+
+        Returns:
+            Clean SQL query string
+        """
+        # Try to extract SQL from markdown code block (```sql ... ```)
+        sql_pattern = r'```sql\s*\n(.*?)\n```'
+        match = re.search(sql_pattern, response, re.DOTALL | re.IGNORECASE)
+
+        if match:
+            sql = match.group(1).strip()
+            logger.debug("Extracted SQL from markdown code block")
+            return sql
+
+        # Fallback: simple cleanup for responses starting with ```sql
+        if response.startswith("```sql"):
+            response = response[len("```sql"):].strip()
+        if response.endswith("```"):
+            response = response[:-len("```")].strip()
+
+        return response
 
     def _generate_system_prompt(self, schema_docs: Dict[str, Any]) -> str:
         """Generate comprehensive system prompt from schema documentation."""

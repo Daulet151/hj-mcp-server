@@ -1,6 +1,6 @@
 """
 Slack Bot for Hero's Journey SQL Assistant
-Processes natural language queries and returns Excel results in Slack.
+Multi-agent system: Classifier -> Informational/Analytical -> Excel Generation
 """
 import json
 import threading
@@ -9,6 +9,7 @@ import requests
 
 from config import Config
 from core import SchemaLoader, SQLGenerator, DatabaseManager, ExcelGenerator
+from agents import AgentOrchestrator
 from utils.logger import setup_logger
 
 # Setup logging
@@ -42,45 +43,84 @@ db_manager = DatabaseManager(
 
 excel_generator = ExcelGenerator()
 
+# Initialize multi-agent orchestrator
+# Pass sql_generator and db_manager to analytical agent for real data analysis
+orchestrator = AgentOrchestrator(
+    api_key=Config.OPENAI_API_KEY,
+    schema_docs=schema_docs,
+    sql_generator=sql_generator,
+    db_manager=db_manager,
+    model=Config.OPENAI_MODEL
+)
+
 # Test database connection on startup
 if not db_manager.test_connection():
     logger.error("Failed to connect to database. Please check your configuration.")
 else:
     logger.info("Database connection successful")
 
+logger.info("Multi-agent system initialized successfully")
 
-def process_slack_query(user_prompt: str, channel_id: str):
+
+def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
     """
-    Process user query in background thread.
+    Process user query using multi-agent system.
 
     Args:
         user_prompt: Natural language question from user
         channel_id: Slack channel ID to send response
+        user_id: Slack user ID
     """
     try:
-        logger.info("Processing query from channel %s", channel_id)
+        logger.info("Processing query from user %s in channel %s", user_id, channel_id)
 
-        # 1. Generate SQL query
-        sql_query = sql_generator.generate_query(user_prompt)
+        # Process message through orchestrator
+        response_text, should_generate_table, data_context, original_query = orchestrator.process_message(
+            user_message=user_prompt,
+            user_id=user_id,
+            channel_id=channel_id
+        )
 
-        # 2. Execute query and get results
-        try:
-            df = db_manager.execute_query(sql_query)
+        # Send agent's response
+        post_slack_text_message(channel_id, response_text)
 
-            if excel_generator.dataframe_is_empty(df):
-                result = "Запрос выполнен успешно, но не вернул данных (результат пуст)."
-                post_slack_message_and_file(channel_id, sql_query, result)
+        # If should generate table, proceed with Excel generation
+        if should_generate_table:
+            # Check if we have cached data from analysis
+            if data_context and data_context.get("dataframe") is not None:
+                # Use cached results from analytical agent
+                logger.info("Using cached data from analysis")
+                df = data_context["dataframe"]
+                sql_query = data_context["sql_query"]
             else:
-                # 3. Create Excel file
-                excel_buffer = excel_generator.create_excel_buffer(df)
+                # Fallback: generate SQL and execute (shouldn't happen normally)
+                logger.info("No cached data, generating fresh query")
+                if not original_query:
+                    logger.error("No original query available for table generation")
+                    post_slack_error(channel_id, "Не удалось получить оригинальный запрос")
+                    return
 
-                # 4. Send to Slack
-                post_slack_message_and_file(channel_id, sql_query, excel_buffer)
+                logger.info("Generating table for query: %s", original_query[:100])
+                sql_query = sql_generator.generate_query(original_query)
+                df = db_manager.execute_query(sql_query)
 
-        except Exception as db_error:
-            error_msg = f"Ошибка выполнения SQL-запроса: {str(db_error)}"
-            logger.error(error_msg)
-            post_slack_message_and_file(channel_id, sql_query, error_msg)
+            # Process results
+            try:
+
+                if excel_generator.dataframe_is_empty(df):
+                    result = "Запрос выполнен успешно, но не вернул данных (результат пуст)."
+                    post_slack_message_and_file(channel_id, sql_query, result)
+                else:
+                    # Create Excel file
+                    excel_buffer = excel_generator.create_excel_buffer(df)
+
+                    # Send to Slack
+                    post_slack_message_and_file(channel_id, sql_query, excel_buffer)
+
+            except Exception as db_error:
+                error_msg = f"Ошибка выполнения SQL-запроса: {str(db_error)}"
+                logger.error(error_msg)
+                post_slack_message_and_file(channel_id, sql_query, error_msg)
 
     except Exception as e:
         error_msg = f"Ошибка при обработке запроса: {str(e)}"
@@ -197,6 +237,38 @@ def post_slack_message_and_file(channel_id: str, sql_query: str, file_buffer_or_
             logger.error("Failed to upload file to Slack: %s", str(e))
 
 
+def post_slack_text_message(channel_id: str, text: str):
+    """
+    Send text message to Slack.
+
+    Args:
+        channel_id: Slack channel ID
+        text: Message text (supports markdown)
+    """
+    if not Config.SLACK_BOT_TOKEN:
+        logger.warning("SLACK_BOT_TOKEN not configured, skipping Slack post")
+        return
+
+    try:
+        response = requests.post(
+            "https://slack.com/api/chat.postMessage",
+            headers={
+                "Authorization": f"Bearer {Config.SLACK_BOT_TOKEN}",
+                "Content-Type": "application/json"
+            },
+            data=json.dumps({
+                "channel": channel_id,
+                "text": text,
+                "mrkdwn": True
+            }),
+            timeout=10
+        )
+        response.raise_for_status()
+        logger.debug("Text message sent to Slack")
+    except Exception as e:
+        logger.error("Failed to send text message to Slack: %s", str(e))
+
+
 def post_slack_error(channel_id: str, error_message: str):
     """Send error message to Slack."""
     if not Config.SLACK_BOT_TOKEN:
@@ -238,16 +310,17 @@ def slack_events():
 
         user_prompt = event.get('text', '').strip()
         channel_id = event.get('channel')
+        user_id = event.get('user', 'unknown')
 
         if not user_prompt:
             return "OK", 200
 
-        logger.info("Received message: %s", user_prompt[:100])
+        logger.info("Received message from user %s: %s", user_id, user_prompt[:100])
 
         # Process in background thread to avoid Slack timeout
         thread = threading.Thread(
             target=process_slack_query,
-            args=(user_prompt, channel_id),
+            args=(user_prompt, channel_id, user_id),
             daemon=True
         )
         thread.start()
