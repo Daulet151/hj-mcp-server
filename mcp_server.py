@@ -277,11 +277,8 @@ async def main():
     """Run the MCP server."""
     logger.info("Starting MCP server...")
 
-    # Test database connection
-    if not db_manager.test_connection():
-        logger.error("Failed to connect to database. Server may not function properly.")
-    else:
-        logger.info("Database connection successful")
+    # Database connection will be tested on first query
+    # to avoid blocking server startup
 
     async with stdio_server() as (read_stream, write_stream):
         logger.info("MCP server running on stdio")
