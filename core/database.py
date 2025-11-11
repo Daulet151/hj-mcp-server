@@ -13,7 +13,8 @@ logger = setup_logger(__name__)
 class DatabaseManager:
     """Manages PostgreSQL database connections and query execution."""
 
-    def __init__(self, host: str, dbname: str, user: str, password: str, port: int = 5432):
+    def __init__(self, host: str, dbname: str, user: str, password: str, port: int = 5432,
+                 query_timeout: int = 60):
         """
         Initialize database manager.
 
@@ -23,14 +24,17 @@ class DatabaseManager:
             user: Database user
             password: Database password
             port: Database port (default: 5432)
+            query_timeout: Query timeout in seconds (default: 60)
         """
         self.config = {
             "host": host,
             "dbname": dbname,
             "user": user,
             "password": password,
-            "port": port
+            "port": port,
+            "connect_timeout": 10  # Connection timeout
         }
+        self.query_timeout = query_timeout
 
     @contextmanager
     def get_connection(self):
@@ -75,6 +79,11 @@ class DatabaseManager:
 
         try:
             with self.get_connection() as conn:
+                # Set statement timeout to prevent long-running queries
+                with conn.cursor() as cur:
+                    cur.execute(f"SET statement_timeout = '{self.query_timeout}s'")
+                    logger.debug("Set query timeout to %d seconds", self.query_timeout)
+
                 df = pd.read_sql(sql, conn)
 
                 logger.info(

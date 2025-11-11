@@ -71,6 +71,9 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
         channel_id: Slack channel ID to send response
         user_id: Slack user ID
     """
+    # Send typing indicator immediately
+    typing_message_ts = post_slack_typing_indicator(channel_id)
+
     try:
         logger.info("Processing query from user %s in channel %s", user_id, channel_id)
 
@@ -81,8 +84,12 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
             channel_id=channel_id
         )
 
-        # Send agent's response
-        post_slack_text_message(channel_id, response_text)
+        # Update typing indicator with agent's response
+        if typing_message_ts:
+            update_slack_message(channel_id, typing_message_ts, response_text)
+        else:
+            # Fallback: send as new message if typing indicator failed
+            post_slack_text_message(channel_id, response_text)
 
         # If should generate table, proceed with Excel generation
         if should_generate_table:
@@ -123,9 +130,14 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
                 post_slack_message_and_file(channel_id, sql_query, error_msg)
 
     except Exception as e:
-        error_msg = f"Ошибка при обработке запроса: {str(e)}"
+        error_msg = f"⚠️ Ошибка при обработке запроса: {str(e)}"
         logger.error(error_msg)
-        post_slack_error(channel_id, error_msg)
+
+        # Update typing indicator with error or send as new message
+        if typing_message_ts:
+            update_slack_message(channel_id, typing_message_ts, f"*{error_msg}*")
+        else:
+            post_slack_error(channel_id, error_msg)
 
 
 def post_slack_message_and_file(channel_id: str, sql_query: str, file_buffer_or_error, filename: str = "query_result.xlsx"):
@@ -235,6 +247,88 @@ def post_slack_message_and_file(channel_id: str, sql_query: str, file_buffer_or_
 
         except Exception as e:
             logger.error("Failed to upload file to Slack: %s", str(e))
+
+
+def post_slack_typing_indicator(channel_id: str) -> str:
+    """
+    Send typing indicator message to Slack and return message timestamp.
+
+    Args:
+        channel_id: Slack channel ID
+
+    Returns:
+        Message timestamp (ts) for later update, or None if failed
+    """
+    if not Config.SLACK_BOT_TOKEN:
+        logger.warning("SLACK_BOT_TOKEN not configured, skipping Slack post")
+        return None
+
+    try:
+        response = requests.post(
+            "https://slack.com/api/chat.postMessage",
+            headers={
+                "Authorization": f"Bearer {Config.SLACK_BOT_TOKEN}",
+                "Content-Type": "application/json"
+            },
+            data=json.dumps({
+                "channel": channel_id,
+                "text": "🤖 _AI Data Analyst анализирует данные..._",
+                "mrkdwn": True
+            }),
+            timeout=10
+        )
+        response.raise_for_status()
+        result = response.json()
+
+        if result.get('ok'):
+            message_ts = result.get('ts')
+            logger.debug("Typing indicator sent to Slack (ts: %s)", message_ts)
+            return message_ts
+        else:
+            logger.error("Failed to send typing indicator: %s", result.get('error'))
+            return None
+    except Exception as e:
+        logger.error("Failed to send typing indicator to Slack: %s", str(e))
+        return None
+
+
+def update_slack_message(channel_id: str, message_ts: str, text: str):
+    """
+    Update existing Slack message with new text.
+
+    Args:
+        channel_id: Slack channel ID
+        message_ts: Message timestamp to update
+        text: New message text (supports markdown)
+    """
+    if not Config.SLACK_BOT_TOKEN or not message_ts:
+        logger.warning("SLACK_BOT_TOKEN not configured or no message_ts, skipping update")
+        return
+
+    try:
+        response = requests.post(
+            "https://slack.com/api/chat.update",
+            headers={
+                "Authorization": f"Bearer {Config.SLACK_BOT_TOKEN}",
+                "Content-Type": "application/json"
+            },
+            data=json.dumps({
+                "channel": channel_id,
+                "ts": message_ts,
+                "text": text,
+                "mrkdwn": True
+            }),
+            timeout=10
+        )
+        response.raise_for_status()
+        result = response.json()
+
+        if result.get('ok'):
+            logger.debug("Message updated successfully")
+        else:
+            logger.error("Failed to update message: %s", result.get('error'))
+    except Exception as e:
+        logger.error("Failed to update message in Slack: %s", str(e))
 
 
 def post_slack_text_message(channel_id: str, text: str):
