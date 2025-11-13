@@ -154,6 +154,13 @@ columns:
   - name: club_name
     type: text
     description: "Название клуба"
+    allowed_values:
+     - "HJ 4YOU"
+     - "HJ Europe City"
+     - "HJ Promenade"
+     - "HJ Nurly Orda"
+     - "HJ Villa"
+     - "HJ Colibri"
 
 business_rules:
   - "Триальщик: пользователь на марафоне (Hero's Week/Basecamp/Первый Шаг) БЕЗ активного HeroPass"

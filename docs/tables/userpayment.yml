@@ -120,6 +120,13 @@ columns:
   - name: club_name
     type: text
     description: "Название клуба к которому привязан пользователь"
+    allowed_values:
+     - "HJ 4YOU"
+     - "HJ Europe City"
+     - "HJ Promenade"
+     - "HJ Nurly Orda"
+     - "HJ Villa"
+     - "HJ Colibri"
 
   - name: discount
     type: float8
