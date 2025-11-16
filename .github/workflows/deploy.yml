@@ -1,0 +1,50 @@
+name: Deploy to DigitalOcean VPS
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Позволяет запустить вручную
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: 22
+          script: |
+            cd ~/select_bot_service
+
+            # Pull latest changes
+            git pull origin main
+
+            # Activate virtual environment
+            source venv/bin/activate
+
+            # Install/update dependencies
+            pip install -r requirements.txt
+
+            # Restart service
+            sudo systemctl restart slackbot
+
+            # Check status
+            sleep 3
+            sudo systemctl status slackbot --no-pager
+
+            echo "✅ Deployment completed successfully!"
+
+      - name: Notify on success
+        if: success()
+        run: echo "🚀 Deployed to production!"
+
+      - name: Notify on failure
+        if: failure()
+        run: echo "❌ Deployment failed!"

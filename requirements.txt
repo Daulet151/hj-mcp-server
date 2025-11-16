@@ -27,3 +27,6 @@ mcp==1.20.0
 
 # Type Hints (for better code quality)
 typing-extensions>=4.14.1
+
+# Production Server
+gunicorn==21.2.0
