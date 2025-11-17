@@ -34,6 +34,17 @@ columns:
     type: text
     description: "Email адрес пользователя"
     pii: true
+
+  - name: sex
+    type: text
+    description: "Пол пользователя"     
+    allowed_values: ["male", "female"]
+    synonyms_ru: ["пол"]
+  
+  - name: birthday
+    type: date
+    description: "Дата рождения пользователя"
+    synonyms_ru: ["день рождения", "дата рождения"]
     
   - name: phonenumber
     type: text
@@ -99,6 +110,13 @@ columns:
   - name: club_name
     type: text
     description: "Название клуба, к которому привязан абонемент"
+    allowed_values:
+     - "HJ 4YOU"
+     - "HJ Europe City"
+     - "HJ Promenade"
+     - "HJ Nurly Orda"
+     - "HJ Villa"
+     - "HJ Colibri"
     synonyms_ru: ["название клуба", "наименование клуба"]
 
 business_rules:

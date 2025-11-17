@@ -1,0 +1,461 @@
+table: olap_schema.userinbodytest
+description: "InBody тесты пользователей - анализ состава тела (вес, жир, мышцы, вода и др.)"
+grain: "user (один пользователь может иметь несколько InBody тестов за разные даты)"
+freshness_sla_hours: 24
+timezone: "Asia/Almaty"
+
+columns:
+  - name: id
+    type: varchar(24)
+    description: "Уникальный идентификатор теста"
+    role: PK
+
+  - name: user
+    type: varchar(24)
+    description: "ID пользователя, который прошел тест"
+    role: FK
+    references: user.id
+    synonyms_ru: ["юзер", "пользователь", "user_id"]
+
+  - name: class
+    type: varchar(24)
+    description: "класс юзера"
+    allowed_values: ["A", "B", "C", "D"]
+
+  - name: username
+    type: text
+    description: "Логин пользователя в системе"
+    
+  - name: firstname
+    type: text
+    description: "Имя пользователя"
+    synonyms_ru: ["имя"]
+    
+  - name: lastname
+    type: text
+    description: "Фамилия пользователя"
+    synonyms_ru: ["фамилия"]
+    
+  - name: email
+    type: text
+    description: "Email адрес пользователя"
+    pii: true
+
+  - name: phonenumber
+    type: text
+    description: "Номер телефона пользователя"
+    pii: true
+
+  - name: testdate
+    type: timestamp
+    description: "Дата и время прохождения теста"
+    synonyms_ru: ["дата теста", "когда проходил", "дата прохождения"]
+
+  - name: testdatetimes
+    type: timestamp
+    description: "Дата и время теста (альтернативное поле)"
+    synonyms_ru: ["время теста"]
+
+  - name: gender
+    type: text
+    description: "Пол пользователя"
+    allowed_values:
+      - "male"
+      - "female"
+    synonyms_ru: ["пол"]
+
+  - name: ht
+    type: float8
+    description: "Рост (Height) в см"
+    synonyms_ru: ["рост", "height"]
+
+  - name: age
+    type: float8
+    description: "Возраст пользователя на момент теста"
+    synonyms_ru: ["возраст"]
+
+  # === ВЕС ===
+  - name: wt
+    type: float8
+    description: "Вес (Weight) в кг"
+    synonyms_ru: ["вес", "weight", "масса тела"]
+
+  - name: wt_min
+    type: float8
+    description: "Минимальный рекомендуемый вес"
+
+  - name: wt_max
+    type: float8
+    description: "Максимальный рекомендуемый вес"
+
+  # === ВОДА (Total Body Water) ===
+  - name: tbw
+    type: float8
+    description: "Общая вода в организме (Total Body Water) в литрах"
+    synonyms_ru: ["вода", "tbw", "общая вода"]
+
+  - name: tbw_min
+    type: float8
+    description: "Минимальная норма воды в организме"
+
+  - name: tbw_max
+    type: float8
+    description: "Максимальная норма воды в организме"
+
+  # === БЕЛОК (Protein) ===
+  - name: protein
+    type: float8
+    description: "Белок в организме в кг"
+    synonyms_ru: ["белок", "протеин"]
+
+  - name: protein_min
+    type: float8
+    description: "Минимальная норма белка"
+
+  - name: protein_max
+    type: float8
+    description: "Максимальная норма белка"
+
+  # === МИНЕРАЛЫ ===
+  - name: mineral
+    type: float8
+    description: "Минералы в организме в кг"
+    synonyms_ru: ["минералы"]
+
+  - name: mineral_max
+    type: float8
+    description: "Максимальная норма минералов"
+
+  # === ЖИР (Body Fat Mass) ===
+  - name: bfm
+    type: float8
+    description: "Масса жира (Body Fat Mass) в кг"
+    synonyms_ru: ["жир", "жировая масса", "bfm"]
+
+  - name: pbfm_min
+    type: float8
+    description: "Минимальный процент жира"
+
+  - name: pbfm_max
+    type: float8
+    description: "Максимальный процент жира"
+
+  # === БЕЗ ЖИРА (Fat Free Mass) ===
+  - name: ffm
+    type: float8
+    description: "Масса без жира (Fat Free Mass) в кг"
+    synonyms_ru: ["безжировая масса", "ffm"]
+
+  - name: ffm_min
+    type: float8
+    description: "Минимальная безжировая масса"
+
+  - name: ffm_max
+    type: float8
+    description: "Максимальная безжировая масса"
+
+  # === СКЕЛЕТНАЯ МУСКУЛАТУРА (Skeletal Muscle Mass) ===
+  - name: smm
+    type: float8
+    description: "Скелетная мышечная масса (Skeletal Muscle Mass) в кг"
+    synonyms_ru: ["мышцы", "мышечная масса", "smm"]
+
+  - name: smm_min
+    type: float8
+    description: "Минимальная мышечная масса"
+
+  - name: smm_max
+    type: float8
+    description: "Максимальная мышечная масса"
+
+  # === BMI (Body Mass Index) ===
+  - name: bmi
+    type: float8
+    description: "Индекс массы тела (BMI)"
+    synonyms_ru: ["индекс массы тела", "имт"]
+
+  - name: bmi_min
+    type: float8
+    description: "Минимальный нормальный BMI"
+
+  - name: bmi_max
+    type: float8
+    description: "Максимальный нормальный BMI"
+
+  # === ПРОЦЕНТ ЖИРА (Percent Body Fat) ===
+  - name: pbf
+    type: float8
+    description: "Процент жира в организме (%)"
+    synonyms_ru: ["процент жира", "pbf"]
+
+  - name: pbf_min
+    type: float8
+    description: "Минимальный процент жира"
+
+  - name: pbf_max
+    type: float8
+    description: "Максимальный процент жира"
+
+  # === СЕГМЕНТНЫЙ АНАЛИЗ (Руки) ===
+  - name: lra
+    type: float8
+    description: "Левая рука - мышечная масса"
+    synonyms_ru: ["левая рука"]
+
+  - name: pilra
+    type: float8
+    description: "Левая рука - процент от нормы"
+
+  - name: lla
+    type: float8
+    description: "Левая рука - мышечная масса (альт)"
+
+  - name: pilla
+    type: float8
+    description: "Левая рука - процент от нормы (альт)"
+
+  - name: fra
+    type: float8
+    description: "Правая рука - мышечная масса"
+    synonyms_ru: ["правая рука"]
+
+  - name: pfra
+    type: float8
+    description: "Правая рука - процент от нормы"
+
+  - name: fla
+    type: float8
+    description: "Правая рука - мышечная масса (альт)"
+
+  - name: pfla
+    type: float8
+    description: "Правая рука - процент от нормы (альт)"
+
+  # === СЕГМЕНТНЫЙ АНАЛИЗ (Туловище) ===
+  - name: lt
+    type: float8
+    description: "Туловище - мышечная масса"
+    synonyms_ru: ["туловище", "корпус"]
+
+  - name: pilt
+    type: float8
+    description: "Туловище - процент от нормы"
+
+  - name: ft
+    type: float8
+    description: "Туловище - мышечная масса (альт)"
+
+  - name: pft
+    type: float8
+    description: "Туловище - процент от нормы (альт)"
+
+  # === СЕГМЕНТНЫЙ АНАЛИЗ (Ноги) ===
+  - name: lrl
+    type: float8
+    description: "Левая нога - мышечная масса"
+    synonyms_ru: ["левая нога"]
+
+  - name: pilrl
+    type: float8
+    description: "Левая нога - процент от нормы"
+
+  - name: lll
+    type: float8
+    description: "Левая нога - мышечная масса (альт)"
+
+  - name: pilll
+    type: float8
+    description: "Левая нога - процент от нормы (альт)"
+
+  - name: frl
+    type: float8
+    description: "Правая нога - мышечная масса"
+    synonyms_ru: ["правая нога"]
+
+  - name: pfrl
+    type: float8
+    description: "Правая нога - процент от нормы"
+
+  - name: fll
+    type: float8
+    description: "Правая нога - мышечная масса (альт)"
+
+  - name: pfll
+    type: float8
+    description: "Правая нога - процент от нормы (альт)"
+
+  # === ИЗМЕРЕНИЯ ТЕЛА ===
+  - name: fs
+    type: float8
+    description: "Оценка телосложения"
+
+  - name: tw
+    type: float8
+    description: "Общая вода в теле"
+
+  - name: wc
+    type: float8
+    description: "Обхват талии (Waist Circumference) в см"
+    synonyms_ru: ["талия", "обхват талии"]
+
+  - name: fc
+    type: float8
+    description: "Обхват грудной клетки"
+
+  - name: mc
+    type: float8
+    description: "Обхват мышц"
+
+  # === МЕТАБОЛИЗМ ===
+  - name: bmr
+    type: float8
+    description: "Базальный метаболизм (Basal Metabolic Rate) - калории в покое"
+    synonyms_ru: ["метаболизм", "bmr", "калории"]
+
+  - name: metabolicage
+    type: float8
+    description: "Метаболический возраст"
+    synonyms_ru: ["метаболический возраст"]
+
+  # === СООТНОШЕНИЯ ===
+  - name: whr
+    type: float8
+    description: "Соотношение талия/бедра (Waist-Hip Ratio)"
+    synonyms_ru: ["талия бедра", "whr"]
+
+  - name: whr_min
+    type: float8
+    description: "Минимальное WHR"
+
+  - name: whr_max
+    type: float8
+    description: "Максимальное WHR"
+
+  # === ВИСЦЕРАЛЬНЫЙ ЖИР ===
+  - name: vfalevel
+    type: float8
+    description: "Уровень висцерального жира (1-20 норма)"
+    synonyms_ru: ["висцеральный жир", "внутренний жир"]
+
+  # === СТЕПЕНЬ ОЖИРЕНИЯ ===
+  - name: obesity
+    type: float8
+    description: "Степень ожирения (%)"
+    synonyms_ru: ["ожирение"]
+
+  - name: od_min
+    type: float8
+    description: "Минимальная степень ожирения"
+
+  - name: od_max
+    type: float8
+    description: "Максимальная степень ожирения"
+
+  # === ИМПЕДАНС (20 кГц) ===
+  - name: ira20
+    type: float8
+    description: "Импеданс правой руки на 20 кГц"
+
+  - name: ila20
+    type: float8
+    description: "Импеданс левой руки на 20 кГц"
+
+  - name: it20
+    type: float8
+    description: "Импеданс туловища на 20 кГц"
+
+  - name: irl20
+    type: float8
+    description: "Импеданс правой ноги на 20 кГц"
+
+  - name: ill20
+    type: float8
+    description: "Импеданс левой ноги на 20 кГц"
+
+  # === ИМПЕДАНС (100 кГц) ===
+  - name: ira100
+    type: float8
+    description: "Импеданс правой руки на 100 кГц"
+
+  - name: ila100
+    type: float8
+    description: "Импеданс левой руки на 100 кГц"
+
+  - name: it100
+    type: float8
+    description: "Импеданс туловища на 100 кГц"
+
+  - name: irl100
+    type: float8
+    description: "Импеданс правой ноги на 100 кГц"
+
+  - name: ill100
+    type: float8
+    description: "Импеданс левой ноги на 100 кГц"
+
+  # === ДОПОЛНИТЕЛЬНЫЕ ПОКАЗАТЕЛИ ===
+  - name: abd
+    type: float8
+    description: "Абдоминальный жир"
+
+  - name: tot_score
+    type: float8
+    description: "Общий балл состояния тела"
+    synonyms_ru: ["общий балл", "оценка"]
+
+  - name: odk
+    type: float8
+    description: "Оценка развития костей"
+
+  - name: bsmi
+    type: float8
+    description: "Индекс скелетной мышечной массы"
+
+  # === ОБОРУДОВАНИЕ ===
+  - name: equip
+    type: float8
+    description: "ID оборудования InBody"
+
+  - name: equip_serial
+    type: text
+    description: "Серийный номер оборудования InBody"
+    synonyms_ru: ["серийник", "номер аппарата"]
+
+  # === СЛУЖЕБНЫЕ ПОЛЯ ===
+  - name: created_at
+    type: timestamp
+    description: "Дата создания записи"
+
+  - name: updated_at
+    type: timestamp
+    description: "Дата последнего обновления записи"
+
+  - name: is_dropped
+    type: boolean
+    description: "Флаг удаления записи"
+    default: false
+
+
+indexes:
+  - columns: [user]
+    description: "Быстрый поиск всех тестов пользователя"
+  - columns: [testdate]
+    description: "Поиск тестов по дате"
+  - columns: [user, testdate]
+    description: "Поиск тестов конкретного пользователя за период"
+
+common_queries:
+  - description: "Последний InBody тест пользователя"
+    example: "SELECT * FROM olap_schema.userinbodytest WHERE \"user\" = '...' ORDER BY testdate DESC LIMIT 1"
+
+  - description: "Динамика веса пользователя"
+    example: "SELECT testdate, wt, bmi FROM olap_schema.userinbodytest WHERE \"user\" = '...' ORDER BY testdate"
+
+  - description: "Пользователи с высоким процентом жира"
+    example: "SELECT \"user\", pbf, testdate FROM olap_schema.userinbodytest WHERE pbf > 30 ORDER BY testdate DESC"
+
+  - description: "Средние показатели за период"
+    example: "SELECT AVG(wt), AVG(pbf), AVG(smm) FROM olap_schema.userinbodytest WHERE testdate BETWEEN '2025-01-01' AND '2025-01-31'"
+
+  - description: "Прогресс мышечной массы"
+    example: "SELECT testdate, smm, pbf FROM olap_schema.userinbodytest WHERE \"user\" = '...' ORDER BY testdate"

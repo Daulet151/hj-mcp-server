@@ -117,6 +117,15 @@ class SQLGenerator:
         5. Колонка "user" обязательно должна использвться с двойными кавычками "user"
         6. Запрещены: DROP, DELETE, UPDATE, INSERT, ALTER, TRUNCATE
 
+        ⚠️ ВАЖНО ПРО ГОД:
+        - Если пользователь НЕ указал конкретный год в запросе, ВСЕГДА используй 2025 год
+        - Примеры:
+          ✅ "Покажи продажи за январь" → используй январь 2025
+          ✅ "Выведи триальщиков за октябрь" → используй октябрь 2025
+          ✅ "Чекины за последний месяц" → используй текущий месяц 2025 года
+          ❌ НЕ спрашивай какой год, просто используй 2025
+        - Если год УКАЗАН явно (например "2024", "2023") - используй указанный год
+
         ВАЖНО ДЛЯ НАЗВАНИЙ ПРОГРАММ:
         - Пользователи могут писать названия программ на русском или в неформальном виде
         - Ты ДОЛЖЕН конвертировать их в точные значения из allowed_values
@@ -179,6 +188,29 @@ class SQLGenerator:
             prompt += f"Синонимы: {', '.join(term.get('synonyms_ru', []))}\n"
             if "sql_logic" in term:
                 prompt += f"SQL логика: {term['sql_logic']}\n"
+
+        # Add program name mappings
+        prompt += "\n=== МАППИНГ НАЗВАНИЙ ПРОГРАММ ===\n"
+        prompt += "ВАЖНО: Пользователи могут писать названия программ по-разному.\n"
+        prompt += "Конвертируй их в ТОЧНЫЕ канонические значения из этого списка:\n\n"
+        for prog in schema_docs["glossary"].get("program_name_mappings", []):
+            canonical = prog.get('canonical', '')
+            synonyms = prog.get('synonyms', [])
+            prompt += f"Каноническое: '{canonical}'\n"
+            prompt += f"  Синонимы: {', '.join(synonyms)}\n"
+            prompt += f"  → В SQL используй ТОЧНО: '{canonical}'\n\n"
+
+        # Add club name mappings
+        prompt += "\n=== МАППИНГ НАЗВАНИЙ КЛУБОВ ===\n"
+        prompt += "ВАЖНО: Пользователи могут писать названия клубов/филиалов по-разному.\n"
+        prompt += "Конвертируй их в ТОЧНЫЕ канонические значения:\n\n"
+        club_mappings = schema_docs["glossary"].get("club_name_mappings", {})
+        for club in club_mappings.get("mappings", []):
+            canonical = club.get('canonical', '')
+            synonyms = club.get('synonyms', [])
+            prompt += f"Каноническое: '{canonical}'\n"
+            prompt += f"  Синонимы: {', '.join(synonyms)}\n"
+            prompt += f"  → В SQL используй ТОЧНО: '{canonical}'\n\n"
 
         # Add examples
         prompt += "\n=== ПРИМЕРЫ ЗАПРОСОВ ===\n"
