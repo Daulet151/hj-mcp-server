@@ -21,7 +21,7 @@ jobs:
           password: ${{ secrets.VPS_PASSWORD }}
           port: 22
           script: |
-            cd ~/select_bot_service
+            cd ~/hj-mcp-server
 
             # Pull latest changes
             git pull origin main
