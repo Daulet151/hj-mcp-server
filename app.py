@@ -23,7 +23,7 @@ except ValueError as e:
     logger.error("Configuration error: %s", str(e))
     raise
 
-# Initialize Flask app
+# Initialize Flask app for Slack events
 app = Flask(__name__)
 
 # Initialize core components
