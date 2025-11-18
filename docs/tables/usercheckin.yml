@@ -56,6 +56,23 @@ columns:
     type: text
     description: "Номер телефона пользователя"
 
+  - name: club
+    type: varchar(24)
+    description: "ID клуба, в котором был совершен чекин"
+    synonyms_ru: ["клуб"]
+
+  - name: club_name
+    type: text
+    description: "Название клуба, в котором был совершен чекин"
+    allowed_values:
+     - "HJ 4YOU"
+     - "HJ Europe City"
+     - "HJ Promenade"
+     - "HJ Nurly Orda"
+     - "HJ Villa"
+     - "HJ Colibri"
+    synonyms_ru: ["название клуба", "наименование клуба"]
+
   - name: event
     type: varchar(24)
     description: "ID события/тренировки, на которую был чекин"
