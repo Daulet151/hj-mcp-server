@@ -1,0 +1,81 @@
+table: olap_schema.strengthmeasurement
+description: "Измерения силовых показателей пользователей - результаты выполнения упражнений (вес, повторения, 1RM)"
+grain: "measurement (одно измерение = один подход упражнения для пользователя)"
+freshness_sla_hours: 24
+timezone: "Asia/Almaty"
+
+columns:
+  - name: id
+    type: varchar(24)
+    description: "Уникальный идентификатор измерения"
+    tests:
+      - unique
+      - not_null
+
+  - name: user
+    type: varchar(24)
+    description: "ID пользователя, который выполнил упражнение"
+    tests:
+      - not_null
+
+  - name: exercise
+    type: varchar(24)
+    description: "ID упражнения (например, приседания, жим лежа, становая тяга)"
+
+  - name: event
+    type: varchar(24)
+    description: "ID события/тренировки, в рамках которой было выполнено упражнение"
+
+  - name: type
+    type: strengthmeasurementtype
+    description: "Тип измерения (например, рабочий вес, разминочный, максимальный)"
+
+  - name: weight
+    type: float8
+    description: "Вес снаряда в килограммах"
+
+  - name: reps
+    type: float8
+    description: "Количество повторений в подходе"
+
+  - name: onerepmax
+    type: float8
+    description: "Расчетный максимум на одно повторение (1RM) в кг"
+
+  - name: cyclecount
+    type: float8
+    description: "Номер цикла/подхода в рамках упражнения"
+
+  - name: created_at
+    type: timestamp
+    description: "Дата и время создания записи"
+
+  - name: updated_at
+    type: timestamp
+    description: "Дата и время последнего обновления записи"
+
+  - name: is_dropped
+    type: bool
+    description: "Флаг удаления записи (soft delete)"
+    default: false
+
+business_notes:
+  - "1RM (One Rep Max) - максимальный вес, который пользователь может поднять на одно повторение"
+  - "1RM обычно рассчитывается по формуле на основе рабочего веса и количества повторений"
+  - "Используется для отслеживания прогресса в силовых показателях"
+  - "Каждое измерение привязано к конкретному событию (event) - тренировке"
+  - "cyclecount помогает отслеживать порядок подходов в одном упражнении"
+  - "Когда пользователи спрашивают про силовые показатели, прогресс в упражнениях, максимумы - это связано с strengthmeasurement"
+
+common_queries:
+  - question: "Какой мой максимум в приседаниях?"
+    explanation: "Используем MAX(onerepmax) для конкретного пользователя и упражнения 'приседания'"
+
+  - question: "Как изменился мой прогресс в жиме лежа за последние 3 месяца?"
+    explanation: "Анализируем динамику onerepmax для упражнения 'жим лежа' с фильтром по created_at"
+
+  - question: "Какие упражнения я выполнял на последней тренировке?"
+    explanation: "Группируем по exercise для последнего event пользователя"
+
+  - question: "Сколько подходов я сделал в становой тяге?"
+    explanation: "Считаем COUNT(DISTINCT cyclecount) для конкретного упражнения и события"
