@@ -18,6 +18,45 @@ columns:
     tests:
       - not_null
 
+  - name: class
+    type: varchar(24)
+    description: "класс юзера"
+    allowed_values: ["A", "B", "C", "D"]
+
+  - name: username
+    type: text
+    description: "Логин пользователя в системе"
+    
+  - name: firstname
+    type: text
+    description: "Имя пользователя"
+    synonyms_ru: ["имя"]
+    
+  - name: lastname
+    type: text
+    description: "Фамилия пользователя"
+    synonyms_ru: ["фамилия"]
+    
+  - name: email
+    type: text
+    description: "Email адрес пользователя"
+    pii: true
+
+  - name: sex
+    type: text
+    description: "Пол пользователя"     
+    allowed_values: ["male", "female"]
+    synonyms_ru: ["пол"]
+  
+  - name: birthday
+    type: date
+    description: "Дата рождения пользователя"
+    synonyms_ru: ["день рождения", "дата рождения"]
+    
+  - name: phonenumber
+    type: text
+    description: "Номер телефона пользователя"
+
   - name: exercise
     type: varchar(24)
     description: "ID упражнения (например, приседания, жим лежа, становая тяга)"
