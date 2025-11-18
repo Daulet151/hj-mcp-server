@@ -1,5 +1,5 @@
 id: q2sql_011
-question_ru: "топ 100 клиентов по кол-ву визитов С 1 июня по 18 ноября firstnamel astname nickname phonenumber club visits" 
+question_ru: "топ 100 клиентов по кол-ву визитов С 1 июня по 18 ноября firstname lastname nickname phonenumber club visits" 
 intents: ["Информация про юзеров кто посетил залы больше всего "]
 
 
