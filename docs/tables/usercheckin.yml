@@ -1,5 +1,5 @@
 table: olap_schema.usercheckin
-description: "Чекины пользователей на тренировки"
+description: "Чекины пользователей на тренировки (ДЕНОРМАЛИЗОВАННАЯ таблица - содержит все данные о пользователе, JOIN с другими таблицами НЕ ТРЕБУЕТСЯ)"
 grain: "id (один чекин = одна запись посещения)"
 freshness_sla_hours: 0  # Обновляется в реальном времени
 timezone: "Asia/Almaty"
@@ -130,6 +130,8 @@ columns:
     synonyms_ru: ["дата обновления"]
 
 business_rules:
+  - "⚠️ ВАЖНО: Таблица ДЕНОРМАЛИЗОВАННАЯ - все данные о пользователе (firstname, lastname, nickname, phonenumber, email и т.д.) уже есть В ЭТОЙ ТАБЛИЦЕ. НЕ делайте JOIN с userheropass или другими таблицами для получения этих полей!"
+  - "Для запросов про визиты/посещения используйте ТОЛЬКО эту таблицу: SELECT firstname, lastname, nickname, phonenumber, club_name, COUNT(id) FROM usercheckin GROUP BY 1,2,3,4,5"
   - "Активные посещения: WHERE created_at >= NOW() - INTERVAL '1 day'"
   - "Посещения за период: WHERE created_at BETWEEN date1 AND date2"
   - "Посещения с оценкой: WHERE isevaluated = true"
@@ -141,6 +143,13 @@ business_rules:
 tests:
   - "unique(id)"
   - "not_null(id, user, created_at)"
-  - "relationships(user, olap_schema.userheropass, user)"
 
 pii: false
+
+business_notes:
+  - "⚠️ КРИТИЧЕСКИ ВАЖНО: Эта таблица ПОЛНОСТЬЮ ДЕНОРМАЛИЗОВАННАЯ"
+  - "Все поля пользователя (firstname, lastname, nickname, email, phonenumber, birthday, sex, class) УЖЕ ЕСТЬ в этой таблице"
+  - "Все поля клуба (club, club_name) УЖЕ ЕСТЬ в этой таблице"
+  - "Все поля события (event, programset, programset_name, programset_type) УЖЕ ЕСТЬ в этой таблице"
+  - "НЕ НУЖНО делать JOIN с userheropass, clan или другими таблицами"
+  - "Просто используйте поля напрямую из usercheckin: SELECT firstname, lastname, nickname FROM usercheckin"
