@@ -178,6 +178,7 @@ class AgentOrchestrator:
             "да", "yes", "конечно", "давай", "давайте", "ок",
             "хорошо", "согласен", "подтверждаю", "генерируй",
             "сгенерируй", "выгрузи", "сделай", "вперед", "го",
+            "ага", "угу", "ага давай", "ага конечно", "ага да",
             "+", "✓", "👍", "okay", "ok"
         ]
 
@@ -197,7 +198,7 @@ class AgentOrchestrator:
                 return True
 
         # If message is very short and positive-like
-        if len(message_lower) <= 5 and message_lower in ["да", "yes", "ок", "ok", "+"]:
+        if len(message_lower) <= 5 and message_lower in ["да", "yes", "ок", "ok", "+", "ага", "угу"]:
             return True
 
         return False
