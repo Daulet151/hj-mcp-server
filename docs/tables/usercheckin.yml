@@ -35,6 +35,11 @@ columns:
     type: text
     description: "Фамилия пользователя"
     synonyms_ru: ["фамилия"]
+
+  - name: nickname
+    type: text
+    description: "Псевдоним пользователя"
+    synonyms_ru: ["никнейм", "ник"]
     
   - name: email
     type: text
