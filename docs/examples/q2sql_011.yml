@@ -1,0 +1,39 @@
+id: q2sql_011
+question_ru: "топ 100 клиентов по кол-ву визитов С 1 июня по 18 ноября firstnamel astname nickname phonenumber club visits" 
+intents: ["Информация про юзеров кто посетил залы больше всего "]
+
+
+sql:
+  dialect: postgres
+  statement: |
+    SELECT 
+    u.firstname,
+    u.lastname,
+    u.nickname,
+    u.phonenumber,
+    u.club_name,
+    COUNT(u.id) AS visits
+    FROM 
+        olap_schema.usercheckin u
+    where created_at >= '2025-06-01' 
+        AND created_at < '2025-11-19'
+    GROUP BY 
+        1,2,3,4,5
+    ORDER BY 
+        visits DESC
+    LIMIT 100    
+
+
+expected_schema:  
+  - name: firstname
+    type: text
+  - name: lastname
+    type: text
+  - name: nickname
+    type: text
+  - name: phonenumber
+    type: text
+  - name: club_name
+    type: text
+  - name: visits
+    type: int64
