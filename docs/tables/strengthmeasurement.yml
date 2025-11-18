@@ -7,6 +7,7 @@ timezone: "Asia/Almaty"
 columns:
   - name: id
     type: varchar(24)
+    role: PK
     description: "Уникальный идентификатор измерения"
     tests:
       - unique
@@ -63,7 +64,9 @@ columns:
 
   - name: event
     type: varchar(24)
-    description: "ID события/тренировки, в рамках которой было выполнено упражнение"
+    role: FK
+    description: "ID события/тренировки, в рамках которой было выполнено упражнение (ссылается на olap_schema.event.id)"
+    synonyms_ru: ["тренировка", "событие"]
 
   - name: type
     type: strengthmeasurementtype
