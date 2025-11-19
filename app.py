@@ -4,6 +4,8 @@ Multi-agent system: Classifier -> Informational/Analytical -> Excel Generation
 """
 import json
 import threading
+import time
+from datetime import datetime
 from flask import Flask, request, jsonify
 import requests
 
@@ -62,6 +64,73 @@ else:
 logger.info("Multi-agent system initialized successfully")
 
 
+def get_slack_user_info(user_id: str) -> dict:
+    """
+    Get user information from Slack API.
+
+    Args:
+        user_id: Slack user ID
+
+    Returns:
+        Dict with user info: {slack_user_id, slack_username, real_name, display_name, email}
+    """
+    if not Config.SLACK_BOT_TOKEN:
+        logger.warning("SLACK_BOT_TOKEN not configured, cannot fetch user info")
+        return {
+            'slack_user_id': user_id,
+            'slack_username': 'unknown',
+            'real_name': 'Unknown User',
+            'display_name': None,
+            'email': None,
+            'is_admin': False,
+            'is_bot': False
+        }
+
+    try:
+        response = requests.post(
+            "https://slack.com/api/users.info",
+            headers={
+                "Authorization": f"Bearer {Config.SLACK_BOT_TOKEN}",
+                "Content-Type": "application/json"
+            },
+            json={"user": user_id},
+            timeout=5
+        )
+
+        if response.ok:
+            data = response.json()
+            if data.get('ok'):
+                user = data.get('user', {})
+                profile = user.get('profile', {})
+
+                return {
+                    'slack_user_id': user_id,
+                    'slack_username': user.get('name'),
+                    'real_name': user.get('real_name') or profile.get('real_name'),
+                    'display_name': profile.get('display_name'),
+                    'email': profile.get('email'),
+                    'is_admin': user.get('is_admin', False),
+                    'is_bot': user.get('is_bot', False)
+                }
+            else:
+                logger.warning(f"Slack API returned not ok: {data.get('error')}")
+        else:
+            logger.warning(f"Failed to fetch user info: HTTP {response.status_code}")
+    except Exception as e:
+        logger.error(f"Error fetching user info: {e}")
+
+    # Fallback
+    return {
+        'slack_user_id': user_id,
+        'slack_username': 'unknown',
+        'real_name': 'Unknown User',
+        'display_name': None,
+        'email': None,
+        'is_admin': False,
+        'is_bot': False
+    }
+
+
 def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
     """
     Process user query using multi-agent system.
@@ -71,14 +140,28 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
         channel_id: Slack channel ID to send response
         user_id: Slack user ID
     """
+    # Get user info from Slack
+    user_info = get_slack_user_info(user_id)
+
+    # Log user in analytics
+    try:
+        db_manager.log_bot_user(user_info)
+    except Exception as e:
+        logger.warning(f"Failed to log user: {e}")
+
+    # Create session ID
+    session_id = f"{user_id}_{channel_id}_{datetime.now().strftime('%Y%m%d')}"
+
     # Send typing indicator immediately
     typing_message_ts = post_slack_typing_indicator(channel_id)
+
+    start_time = time.time()
 
     try:
         logger.info("Processing query from user %s in channel %s", user_id, channel_id)
 
         # Process message through orchestrator
-        response_text, should_generate_table, data_context, original_query = orchestrator.process_message(
+        response_text, should_generate_table, data_context, original_query, query_type = orchestrator.process_message(
             user_message=user_prompt,
             user_id=user_id,
             channel_id=channel_id
@@ -129,6 +212,29 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
                 logger.error(error_msg)
                 post_slack_message_and_file(channel_id, sql_query, error_msg)
 
+        # Log interaction
+        try:
+            execution_time_ms = int((time.time() - start_time) * 1000)
+            interaction_data = {
+                'session_id': session_id,
+                'slack_user_id': user_id,
+                'slack_username': user_info.get('slack_username', 'unknown'),
+                'real_name': user_info.get('real_name', 'Unknown User'),
+                'channel_id': channel_id,
+                'user_message': user_prompt,
+                'query_type': query_type,
+                'bot_response': response_text,
+                'sql_query': data_context.get('sql_query') if data_context else None,
+                'sql_executed': data_context is not None,
+                'sql_execution_time_ms': execution_time_ms,
+                'rows_returned': len(data_context.get('dataframe', [])) if data_context else 0,
+                'table_generated': should_generate_table,
+                'error_message': None
+            }
+            db_manager.log_bot_interaction(interaction_data)
+        except Exception as log_error:
+            logger.warning(f"Failed to log interaction: {log_error}")
+
     except Exception as e:
         error_msg = f"⚠️ Ошибка при обработке запроса: {str(e)}"
         logger.error(error_msg)
@@ -138,6 +244,29 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
             update_slack_message(channel_id, typing_message_ts, f"*{error_msg}*")
         else:
             post_slack_error(channel_id, error_msg)
+
+        # Log error interaction
+        try:
+            execution_time_ms = int((time.time() - start_time) * 1000)
+            interaction_data = {
+                'session_id': session_id,
+                'slack_user_id': user_id,
+                'slack_username': user_info.get('slack_username', 'unknown'),
+                'real_name': user_info.get('real_name', 'Unknown User'),
+                'channel_id': channel_id,
+                'user_message': user_prompt,
+                'query_type': None,
+                'bot_response': None,
+                'sql_query': None,
+                'sql_executed': False,
+                'sql_execution_time_ms': execution_time_ms,
+                'rows_returned': 0,
+                'table_generated': False,
+                'error_message': str(e)
+            }
+            db_manager.log_bot_interaction(interaction_data)
+        except Exception as log_error:
+            logger.warning(f"Failed to log error interaction: {log_error}")
 
 
 def post_slack_message_and_file(channel_id: str, sql_query: str, file_buffer_or_error, filename: str = "query_result.xlsx"):
