@@ -59,7 +59,7 @@ class AgentOrchestrator:
         user_message: str,
         user_id: str,
         channel_id: str
-    ) -> Tuple[str, bool, Optional[Any], Optional[str], Optional[str]]:
+    ) -> Tuple[str, bool, Optional[Any], Optional[str]]:
         """
         Process user message and return appropriate response.
 
@@ -69,20 +69,18 @@ class AgentOrchestrator:
             channel_id: Slack channel ID
 
         Returns:
-            Tuple of (response_text, should_generate_table, data_context, original_query, query_type)
+            Tuple of (response_text, should_generate_table, data_context, original_query)
             - response_text: Text to send to user
             - should_generate_table: True if we should generate Excel table
             - data_context: Dict with 'dataframe' and 'sql_query' (if available from analysis)
             - original_query: Original user query for table generation (None if not applicable)
-            - query_type: Type of query ('informational', 'data_extraction', or None for confirmation)
         """
         conversation_key = (user_id, channel_id)
         conversation = self.conversations.get(conversation_key, {
             "state": ConversationState.INITIAL,
             "last_query": None,
             "dataframe": None,
-            "sql_query": None,
-            "query_type": None
+            "sql_query": None
         })
 
         current_state = conversation["state"]
@@ -108,32 +106,29 @@ class AgentOrchestrator:
                     "sql_query": sql_query
                 }
 
-                query_type = conversation.get("query_type")
-
                 return (
                     "Отлично! Генерирую таблицу для вас... ⏳",
                     True,  # Should generate table
                     data_context,  # Cached data from analysis
-                    original_query,  # Original query
-                    query_type  # Query type
+                    original_query  # Original query
                 )
             else:
                 # User declined or asked something else
                 logger.info("User declined or asked new question")
                 self._reset_conversation(conversation_key)
                 # Process as new query
-                response, should_generate, query_type = self._process_new_query(user_message, conversation_key)
-                return (response, should_generate, None, None, query_type)
+                response, should_generate = self._process_new_query(user_message, conversation_key)
+                return (response, should_generate, None, None)
 
         # Process new query
-        response, should_generate, query_type = self._process_new_query(user_message, conversation_key)
-        return (response, should_generate, None, None, query_type)
+        response, should_generate = self._process_new_query(user_message, conversation_key)
+        return (response, should_generate, None, None)
 
     def _process_new_query(
         self,
         user_message: str,
         conversation_key: Tuple[str, str]
-    ) -> Tuple[str, bool, Optional[str]]:
+    ) -> Tuple[str, bool]:
         """Process new user query."""
         # Classify query
         query_type = self.classifier.classify(user_message)
@@ -143,7 +138,7 @@ class AgentOrchestrator:
             # Handle informational query
             response = self.informational_agent.respond(user_message)
             self._reset_conversation(conversation_key)
-            return (response, False, query_type)
+            return (response, False)
 
         elif query_type == "data_extraction":
             # Handle data extraction query - now returns analysis, dataframe, and sql
@@ -155,17 +150,15 @@ class AgentOrchestrator:
                 "state": ConversationState.WAITING_FOR_CONFIRMATION,
                 "last_query": user_message,
                 "dataframe": dataframe,
-                "sql_query": sql_query,
-                "query_type": query_type
+                "sql_query": sql_query
             }
 
-            return (analysis, False, query_type)
+            return (analysis, False)
 
         # Fallback
         return (
             "Извините, я не совсем понял ваш запрос. Попробуйте переформулировать? 🤔",
-            False,
-            None
+            False
         )
 
     def _is_confirmation(self, message: str) -> bool:
