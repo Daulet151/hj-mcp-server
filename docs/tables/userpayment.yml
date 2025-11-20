@@ -71,6 +71,12 @@ columns:
     description: "ID события марафона (если платеж за марафон)"
     synonyms_ru: ["марафон"]
     null_semantics: "NULL = не оплата марафона"
+
+  - name: marathon_name
+    type: varchar(48)
+    description: "Название марафона"
+    synonyms_ru: ["название марафона", "программа","марафон"]
+    null_semantics: "NULL = не оплата марафона"
     
   - name: heropass
     type: varchar(24)

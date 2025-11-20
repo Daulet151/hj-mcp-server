@@ -1,0 +1,67 @@
+id: q2sql_012
+question_ru: "Выведи мне общее количество пользователей триалов, купивших триал в период с 14.11.2025 по 19.11.2025 только по клубам Colibri и Nurly Orda" 
+intents: ["Юзеры триалов, купившие триал в указанный период по указанным клубам"]
+
+
+sql:
+  dialect: postgres
+  statement: |
+    with fv as (
+      select * from olap_schema.userpayment
+      where "type" != 'addedFromHeroPass' and marathon_name  IN ('Hero''s Week', 'Basecamp', 'Первый шаг', 'Индивидуальная программа')
+      and created_at >= '2025-11-14' 
+              AND created_at < '2025-11-20'
+              AND club_name IN ('HJ Colibri', 'HJ Nurly Orda')
+    ),
+    sv as (
+      select "user", count(id) as checkin_cnt
+      from olap_schema.usercheckin u 
+      where created_at >= '2025-11-14' 
+            AND created_at < '2025-11-20'
+      group by "user"
+    ),
+    tv as (
+      select distinct marathonevent, me_startttime, me_endtime
+      from olap_schema.usermarathonevent
+    )
+    select fv."user", fv."class", fv.username, fv.nickname, fv.firstname, fv.lastname, fv.email, fv.sex, fv.birthday, fv.phonenumber, fv."type", fv.club_name, fv.marathon_name, tv.me_startttime, tv.me_endtime, coalesce(checkin_cnt, 0) as checkin_cnt
+    from fv
+    left join sv on fv."user" = sv."user"
+    left join tv on fv.marathonevent = tv.marathonevent
+        
+
+expected_schema:  
+  - name: user
+    type: varchar(24)
+  - name: class
+    type: varchar(24)
+  - name: username
+    type: text
+  - name: nickname
+    type: text
+  - name: firstname
+    type: text
+  - name: lastname
+    type: text
+  - name: email
+    type: text
+  - name: sex
+    type: text    
+  - name: birthday
+    type: date
+  - name: phonenumber
+    type: text
+  - name: type
+    type: varchar(48)
+  - name: club_name
+    type: text
+  - name: marathon_name
+    type: varchar(48)
+  - name: me_startttime
+    type: timestamp
+  - name: me_endtime
+    type: timestamp
+  - name: checkin_cnt
+    type: int64
+
+ 
