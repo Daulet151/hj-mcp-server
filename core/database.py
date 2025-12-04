@@ -138,3 +138,90 @@ class DatabaseManager:
         """
 
         return self.execute_query(sql)
+
+    def log_bot_user(self, user_info: dict):
+        """
+        Insert or update bot user information in analytics.bot_users.
+
+        Args:
+            user_info: Dict with keys: slack_user_id, slack_username, real_name,
+                      email, display_name, is_admin, is_bot
+        """
+        sql = """
+            INSERT INTO analytics.bot_users (
+                slack_user_id, slack_username, real_name, email,
+                display_name, is_admin, is_bot, first_seen_at, last_seen_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+            ON CONFLICT (slack_user_id)
+            DO UPDATE SET
+                slack_username = EXCLUDED.slack_username,
+                real_name = EXCLUDED.real_name,
+                email = EXCLUDED.email,
+                display_name = EXCLUDED.display_name,
+                last_seen_at = NOW(),
+                total_interactions = bot_users.total_interactions + 1,
+                updated_at = NOW()
+        """
+
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (
+                        user_info.get('slack_user_id'),
+                        user_info.get('slack_username'),
+                        user_info.get('real_name'),
+                        user_info.get('email'),
+                        user_info.get('display_name'),
+                        user_info.get('is_admin', False),
+                        user_info.get('is_bot', False)
+                    ))
+                    conn.commit()
+                    logger.debug("User logged to analytics.bot_users: %s", user_info.get('slack_user_id'))
+        except Exception as e:
+            logger.error("Failed to log user to analytics: %s", str(e))
+
+    def log_bot_interaction(self, interaction_data: dict):
+        """
+        Log bot interaction to analytics.bot_interactions.
+
+        Args:
+            interaction_data: Dict with keys: session_id, slack_user_id, slack_username,
+                             real_name, channel_id, user_message, query_type, bot_response,
+                             sql_query, sql_executed, sql_execution_time_ms, rows_returned,
+                             error_message, table_generated
+        """
+        sql = """
+            INSERT INTO analytics.bot_interactions (
+                session_id, slack_user_id, slack_username, real_name, channel_id,
+                user_message, query_type, bot_response, sql_query, sql_executed,
+                sql_execution_time_ms, rows_returned, error_message, table_generated,
+                table_generated_ts, created_at
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW()
+            )
+        """
+
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (
+                        interaction_data.get('session_id'),
+                        interaction_data.get('slack_user_id'),
+                        interaction_data.get('slack_username'),
+                        interaction_data.get('real_name'),
+                        interaction_data.get('channel_id'),
+                        interaction_data.get('user_message'),
+                        interaction_data.get('query_type'),
+                        interaction_data.get('bot_response'),
+                        interaction_data.get('sql_query'),
+                        interaction_data.get('sql_executed', False),
+                        interaction_data.get('sql_execution_time_ms'),
+                        interaction_data.get('rows_returned'),
+                        interaction_data.get('error_message'),
+                        interaction_data.get('table_generated', False),
+                        interaction_data.get('table_generated_ts')
+                    ))
+                    conn.commit()
+                    logger.debug("Interaction logged to analytics.bot_interactions")
+        except Exception as e:
+            logger.error("Failed to log interaction to analytics: %s", str(e))

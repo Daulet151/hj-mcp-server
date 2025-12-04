@@ -4,6 +4,8 @@ Multi-agent system: Classifier -> Informational/Analytical -> Excel Generation
 """
 import json
 import threading
+import time
+from datetime import datetime
 from flask import Flask, request, jsonify
 import requests
 
@@ -62,6 +64,64 @@ else:
 logger.info("Multi-agent system initialized successfully")
 
 
+def get_slack_user_info(user_id: str) -> dict:
+    """
+    Fetch user information from Slack API.
+
+    Args:
+        user_id: Slack user ID
+
+    Returns:
+        Dict with user information
+    """
+    try:
+        response = requests.post(
+            "https://slack.com/api/users.info",
+            headers={"Authorization": f"Bearer {Config.SLACK_BOT_TOKEN}"},
+            json={"user": user_id},
+            timeout=5
+        )
+        response.raise_for_status()
+        data = response.json()
+
+        if not data.get('ok'):
+            logger.error("Failed to fetch user info: %s", data.get('error'))
+            return {
+                'slack_user_id': user_id,
+                'slack_username': 'unknown',
+                'real_name': 'unknown',
+                'email': None,
+                'display_name': 'unknown',
+                'is_admin': False,
+                'is_bot': False
+            }
+
+        user = data.get('user', {})
+        profile = user.get('profile', {})
+
+        return {
+            'slack_user_id': user_id,
+            'slack_username': user.get('name', 'unknown'),
+            'real_name': user.get('real_name', 'unknown'),
+            'email': profile.get('email'),
+            'display_name': profile.get('display_name', user.get('name', 'unknown')),
+            'is_admin': user.get('is_admin', False),
+            'is_bot': user.get('is_bot', False)
+        }
+
+    except Exception as e:
+        logger.error("Error fetching user info: %s", str(e))
+        return {
+            'slack_user_id': user_id,
+            'slack_username': 'unknown',
+            'real_name': 'unknown',
+            'email': None,
+            'display_name': 'unknown',
+            'is_admin': False,
+            'is_bot': False
+        }
+
+
 def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
     """
     Process user query using multi-agent system.
@@ -71,18 +131,49 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
         channel_id: Slack channel ID to send response
         user_id: Slack user ID
     """
+    # Get user info and log to analytics
+    user_info = get_slack_user_info(user_id)
+    db_manager.log_bot_user(user_info)
+
+    # Generate session ID for tracking
+    session_id = f"{user_id}_{channel_id}_{datetime.now().strftime('%Y%m%d')}"
+    start_time = time.time()
+
     # Send typing indicator immediately
     typing_message_ts = post_slack_typing_indicator(channel_id)
+
+    # Initialize interaction data
+    interaction_data = {
+        'session_id': session_id,
+        'slack_user_id': user_id,
+        'slack_username': user_info.get('slack_username'),
+        'real_name': user_info.get('real_name'),
+        'channel_id': channel_id,
+        'user_message': user_prompt,
+        'query_type': None,
+        'bot_response': None,
+        'sql_query': None,
+        'sql_executed': False,
+        'sql_execution_time_ms': None,
+        'rows_returned': None,
+        'error_message': None,
+        'table_generated': False,
+        'table_generated_ts': None
+    }
 
     try:
         logger.info("Processing query from user %s in channel %s", user_id, channel_id)
 
         # Process message through orchestrator
-        response_text, should_generate_table, data_context, original_query = orchestrator.process_message(
+        response_text, should_generate_table, data_context, original_query, query_type = orchestrator.process_message(
             user_message=user_prompt,
             user_id=user_id,
             channel_id=channel_id
         )
+
+        # Update interaction data
+        interaction_data['query_type'] = query_type
+        interaction_data['bot_response'] = response_text
 
         # Update typing indicator with agent's response
         if typing_message_ts:
@@ -93,17 +184,27 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
 
         # If should generate table, proceed with Excel generation
         if should_generate_table:
+            sql_start_time = time.time()
+
             # Check if we have cached data from analysis
             if data_context and data_context.get("dataframe") is not None:
                 # Use cached results from analytical agent
                 logger.info("Using cached data from analysis")
                 df = data_context["dataframe"]
                 sql_query = data_context["sql_query"]
+
+                # Update interaction data
+                interaction_data['sql_query'] = sql_query
+                interaction_data['sql_executed'] = True
+                interaction_data['sql_execution_time_ms'] = int((time.time() - sql_start_time) * 1000)
+                interaction_data['rows_returned'] = len(df)
             else:
                 # Fallback: generate SQL and execute (shouldn't happen normally)
                 logger.info("No cached data, generating fresh query")
                 if not original_query:
                     logger.error("No original query available for table generation")
+                    interaction_data['error_message'] = "No original query available"
+                    db_manager.log_bot_interaction(interaction_data)
                     post_slack_error(channel_id, "Не удалось получить оригинальный запрос")
                     return
 
@@ -111,12 +212,21 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
                 sql_query = sql_generator.generate_query(original_query)
                 df = db_manager.execute_query(sql_query)
 
+                # Update interaction data
+                interaction_data['sql_query'] = sql_query
+                interaction_data['sql_executed'] = True
+                interaction_data['sql_execution_time_ms'] = int((time.time() - sql_start_time) * 1000)
+                interaction_data['rows_returned'] = len(df)
+
             # Process results
             try:
 
                 if excel_generator.dataframe_is_empty(df):
                     result = "Запрос выполнен успешно, но не вернул данных (результат пуст)."
                     post_slack_message_and_file(channel_id, sql_query, result)
+
+                    # Log interaction
+                    db_manager.log_bot_interaction(interaction_data)
                 else:
                     # Create Excel file
                     excel_buffer = excel_generator.create_excel_buffer(df)
@@ -124,14 +234,31 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
                     # Send to Slack
                     post_slack_message_and_file(channel_id, sql_query, excel_buffer)
 
+                    # Update and log interaction
+                    interaction_data['table_generated'] = True
+                    interaction_data['table_generated_ts'] = datetime.now()
+                    db_manager.log_bot_interaction(interaction_data)
+
             except Exception as db_error:
                 error_msg = f"Ошибка выполнения SQL-запроса: {str(db_error)}"
                 logger.error(error_msg)
+
+                # Log error
+                interaction_data['error_message'] = str(db_error)
+                db_manager.log_bot_interaction(interaction_data)
+
                 post_slack_message_and_file(channel_id, sql_query, error_msg)
+        else:
+            # No table generation - just log the interaction
+            db_manager.log_bot_interaction(interaction_data)
 
     except Exception as e:
         error_msg = f"⚠️ Ошибка при обработке запроса: {str(e)}"
         logger.error(error_msg)
+
+        # Log error to analytics
+        interaction_data['error_message'] = str(e)
+        db_manager.log_bot_interaction(interaction_data)
 
         # Update typing indicator with error or send as new message
         if typing_message_ts:
