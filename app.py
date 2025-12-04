@@ -66,7 +66,7 @@ logger.info("Multi-agent system initialized successfully")
 
 def get_slack_user_info(user_id: str) -> dict:
     """
-    Fetch user information from Slack API.
+    Fetch user information from Slack API using users.list.
 
     Args:
         user_id: Slack user ID
@@ -75,17 +75,17 @@ def get_slack_user_info(user_id: str) -> dict:
         Dict with user information
     """
     try:
+        # Use users.list instead of users.info (workaround for user_not_found issue)
         response = requests.post(
-            "https://slack.com/api/users.info",
+            "https://slack.com/api/users.list",
             headers={"Authorization": f"Bearer {Config.SLACK_BOT_TOKEN}"},
-            json={"user": user_id},
-            timeout=5
+            timeout=10
         )
         response.raise_for_status()
         data = response.json()
 
         if not data.get('ok'):
-            logger.error("Failed to fetch user info: %s", data.get('error'))
+            logger.error("Failed to fetch users list: %s", data.get('error'))
             return {
                 'slack_user_id': user_id,
                 'slack_username': 'unknown',
@@ -96,17 +96,31 @@ def get_slack_user_info(user_id: str) -> dict:
                 'is_bot': False
             }
 
-        user = data.get('user', {})
-        profile = user.get('profile', {})
+        # Find user in the list
+        members = data.get('members', [])
+        for user in members:
+            if user.get('id') == user_id:
+                profile = user.get('profile', {})
+                return {
+                    'slack_user_id': user_id,
+                    'slack_username': user.get('name', 'unknown'),
+                    'real_name': user.get('real_name', 'unknown'),
+                    'email': profile.get('email'),
+                    'display_name': profile.get('display_name', user.get('name', 'unknown')),
+                    'is_admin': user.get('is_admin', False),
+                    'is_bot': user.get('is_bot', False)
+                }
 
+        # User not found in list
+        logger.warning("User %s not found in workspace members list", user_id)
         return {
             'slack_user_id': user_id,
-            'slack_username': user.get('name', 'unknown'),
-            'real_name': user.get('real_name', 'unknown'),
-            'email': profile.get('email'),
-            'display_name': profile.get('display_name', user.get('name', 'unknown')),
-            'is_admin': user.get('is_admin', False),
-            'is_bot': user.get('is_bot', False)
+            'slack_username': 'unknown',
+            'real_name': 'unknown',
+            'email': None,
+            'display_name': 'unknown',
+            'is_admin': False,
+            'is_bot': False
         }
 
     except Exception as e:
