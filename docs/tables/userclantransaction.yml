@@ -1,0 +1,116 @@
+table: raw.userclantransaction
+description: "Транзакции пользователей в кланах (заявки на вступление/выход из клана)"
+grain: "id (одна транзакция = одна заявка на действие в клане)"
+freshness_sla_hours: 0  # Обновляется в реальном времени
+timezone: "Asia/Almaty"
+
+columns:
+  - name: id
+    type: text
+    role: PK
+    description: "Уникальный идентификатор транзакции"
+    null_semantics: "NOT NULL"
+
+  - name: "user"
+    type: text
+    role: FK
+    description: "ID пользователя, который создал транзакцию"
+    synonyms_ru: ["пользователь", "клиент", "атлет"]
+
+  - name: initiator
+    type: text
+    description: "ID пользователя, который инициировал транзакцию"
+    synonyms_ru: ["инициатор", "кто инициировал", "создатель заявки"]
+    business_notes: "Может отличаться от user - например, лидер клана приглашает пользователя"
+    null_semantics: "NULL = пользователь сам инициировал действие"
+
+  - name: clan
+    type: text
+    role: FK
+    description: "ID клана, к которому относится транзакция"
+    synonyms_ru: ["клан", "команда"]
+    business_notes: "Ссылается на clan.id"
+
+  - name: status
+    type: text
+    description: "Статус транзакции"
+    synonyms_ru: ["статус", "состояние заявки"]
+    allowed_values:
+      - "pending"
+      - "approved"
+      - "rejected"
+      - "canceled"
+      - "addClan"
+      - "cameOut"
+      - "exclude"
+      - "userAcceptedClan"
+      - "userCanceledClanInvited"
+      - "adminClanInvited"
+      - "adminCanceledInClan"
+      - "clanAdminChanged"
+      - "clanSubAdminAdded"
+      - "clanSubAdminRemoved"
+    business_notes: |
+      - pending: Заявка ожидает рассмотрения
+      - approved: Заявка одобрена
+      - rejected: Заявка отклонена
+      - canceled: Заявка отменена
+      - addClan: Админ создал клан
+      - cameOut: Пользователь вышел из клана
+      - exclude: Пользователь исключен из клана
+      - userAcceptedClan: Пользователь принял приглашение в клан
+      - userCanceledClanInvited: Пользователь отклонил приглашение в клан
+      - adminClanInvited: Админ пригласил пользователя в клан
+      - adminCanceledInClan: Админ отменил заявку/приглашение
+      - clanAdminChanged: Изменение администратора клана
+      - clanSubAdminAdded: Добавлен суб-администратор клана
+      - clanSubAdminRemoved: Удален суб-администратор клана
+    null_semantics: "NULL = статус не определен"
+
+  - name: created_at
+    type: timestamp
+    description: "Дата и время создания транзакции (Asia/Almaty)"
+    synonyms_ru: ["дата создания", "когда создано", "время заявки"]
+    business_notes: "Время подачи заявки на вступление/выход из клана"
+    null_semantics: "NULL = время создания не зафиксировано"
+
+  - name: updated_at
+    type: timestamp
+    description: "Дата и время последнего обновления транзакции"
+    synonyms_ru: ["дата обновления", "последнее изменение"]
+    business_notes: "Обновляется при изменении статуса заявки"
+    null_semantics: "NULL = не было обновлений после создания"
+
+  - name: is_dropped
+    type: bool
+    description: "Была ли транзакция удалена (soft delete)"
+    synonyms_ru: ["удалено", "в корзине", "архивировано"]
+    business_notes: "true = транзакция удалена, но данные сохранены для истории"
+    null_semantics: "NULL = считается как false (не удалено)"
+
+business_rules:
+  - "Активные транзакции: WHERE (is_dropped IS NULL OR is_dropped = false)"
+  - "Ожидающие рассмотрения: WHERE status = 'pending' AND (is_dropped IS NULL OR is_dropped = false)"
+  - "Одобренные заявки: WHERE status = 'approved'"
+  - "Отклоненные заявки: WHERE status = 'rejected'"
+  - "Транзакции пользователя: WHERE user = 'user_id' AND (is_dropped IS NULL OR is_dropped = false)"
+  - "Транзакции клана: WHERE clan = 'clan_id' AND (is_dropped IS NULL OR is_dropped = false)"
+  - "Самостоятельные заявки: WHERE initiator IS NULL OR initiator = user"
+  - "Приглашения от лидера: WHERE initiator IS NOT NULL AND initiator != user"
+  - "История за период: WHERE created_at BETWEEN date1 AND date2"
+  - "Недавние транзакции: WHERE created_at >= NOW() - INTERVAL '7 days'"
+
+tests:
+  - "unique(id)"
+  - "not_null(id)"
+
+pii: false
+
+business_notes:
+  - "Транзакция отражает любое действие пользователя связанное с кланом (вступление, выход, приглашение)"
+  - "Если user = initiator или initiator IS NULL, то пользователь сам подал заявку"
+  - "Если user != initiator, то это приглашение от лидера клана"
+  - "is_dropped используется для soft delete - данные не удаляются физически"
+  - "Для получения деталей о пользователе делайте JOIN с userheropass"
+  - "Для получения деталей о клане делайте JOIN с clan"
+  - "Для активных записей всегда проверяйте is_dropped IS NULL OR is_dropped = false"

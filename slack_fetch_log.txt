@@ -1,0 +1,4 @@
+2025-12-08 15:35:50 - core.database - INFO - Executing SQL query
+C:\Users\daule\Downloads\select_bot_service\core\database.py:87: UserWarning: pandas only supports SQLAlchemy connectable (engine/connection) or database string URI or sqlite3 DBAPI2 connection. Other DBAPI2 objects are not tested. Please consider using SQLAlchemy.
+  df = pd.read_sql(sql, conn)
+2025-12-08 15:35:51 - core.database - INFO - Query executed successfully: 158 rows, 5 columns
