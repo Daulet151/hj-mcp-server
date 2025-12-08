@@ -1,4 +1,4 @@
-table: raw.userclantransaction
+table: userclantransaction
 description: "Транзакции пользователей в кланах (заявки на вступление/выход из клана)"
 grain: "id (одна транзакция = одна заявка на действие в клане)"
 freshness_sla_hours: 0  # Обновляется в реальном времени
