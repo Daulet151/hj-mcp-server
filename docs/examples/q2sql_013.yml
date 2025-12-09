@@ -1,0 +1,50 @@
+id: q2sql_013
+question_ru: "Выгрузи мне таблицу атлетов, которые вышли из кланов за последние 30 дней и не вступали с них обратно" 
+intents: ["Атлеты, вышедшие из кланов за последние 30 дней и не вступавшие обратно"]
+
+
+sql:
+  dialect: postgres
+  statement: |
+    WITH recent_clan_exits AS (
+      SELECT 
+        "user",
+        clan,
+        MAX(created_at) AS last_exit_date
+      FROM 
+        olap_schema.userclantransaction
+      WHERE 
+        status in  ('cameOut', 'exclude') 
+        AND created_at >= NOW() - INTERVAL '30 days'
+      GROUP BY 
+        "user", clan
+    ),
+    rejoined_clans AS (
+      SELECT 
+        "user",
+        clan
+      FROM 
+        olap_schema.userclantransaction
+      WHERE 
+        status in ('userAcceptedClan', 'approved')
+        AND created_at >= NOW() - INTERVAL '30 days'
+    )
+    SELECT 
+      rce."user",
+      rce.clan,
+      rce.last_exit_date
+    FROM 
+      recent_clan_exits rce
+    LEFT JOIN 
+      rejoined_clans rc ON rce."user" = rc."user" AND rce.clan = rc.clan
+    WHERE 
+      rc."user" IS NULL
+        
+
+expected_schema:  
+  - name: user
+    type: varchar(24)
+  - name: clan
+    type: varchar(24)
+  - name: last_exit_date
+    type: timestamp
