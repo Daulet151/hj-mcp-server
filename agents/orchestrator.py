@@ -8,6 +8,7 @@ from .smart_classifier import SmartIntentClassifier  # New smart classifier
 from .informational_agent import InformationalAgent
 from .analytical_agent import AnalyticalAgent
 from .continuation_agent import ContinuationAgent  # New agent for follow-ups
+from .query_refinement_agent import QueryRefinementAgent  # New agent for SQL modifications
 from .conversation_context import ConversationContext  # New context storage
 from utils.logger import setup_logger
 
@@ -57,6 +58,11 @@ class AgentOrchestrator:
         # NEW: Smart agents for conversational flow
         self.smart_classifier = SmartIntentClassifier(api_key, model)
         self.continuation_agent = ContinuationAgent(api_key, model)
+        self.query_refinement_agent = QueryRefinementAgent(api_key, schema_docs, model)
+
+        # Store references for query refinement agent
+        self.sql_generator = sql_generator
+        self.db_manager = db_manager
 
         # NEW: Enhanced conversation storage
         # Key: (user_id, channel_id), Value: ConversationContext
@@ -137,6 +143,9 @@ class AgentOrchestrator:
         if intent == "continuation":
             return self._handle_continuation(context, user_message)
 
+        elif intent == "query_refinement":
+            return self._handle_query_refinement(context, user_message)
+
         elif intent == "table_request":
             return self._handle_table_request(context, user_message)
 
@@ -195,6 +204,57 @@ class AgentOrchestrator:
             response = "Извините, произошла ошибка при обработке вашего вопроса. Попробуйте задать новый запрос."
             context.add_bot_message(response)
             return (response, False, None, None, "continuation")
+
+    def _handle_query_refinement(
+        self,
+        context: ConversationContext,
+        user_message: str
+    ) -> Tuple[str, bool, Optional[Any], Optional[str], str]:
+        """
+        Handle query refinement - modify existing SQL based on follow-up.
+
+        Args:
+            context: Conversation context
+            user_message: User's refinement request
+
+        Returns:
+            Response tuple
+        """
+        logger.info("Handling query refinement (SQL modification)")
+
+        if not context.has_dataframe():
+            logger.warning("Query refinement requested but no data in memory")
+            response = "У меня нет данных для уточнения запроса. Можете задать новый аналитический запрос?"
+            context.add_bot_message(response)
+            return (response, False, None, None, "query_refinement")
+
+        try:
+            # Use query refinement agent to modify SQL and re-execute
+            analysis, new_dataframe, refined_sql = self.query_refinement_agent.refine_query(
+                original_sql=context.last_sql,
+                original_user_query=context.last_user_query,
+                refinement_request=user_message,
+                sql_generator=self.sql_generator,
+                db_manager=self.db_manager
+            )
+
+            # Update context with NEW refined data
+            context.save_data(
+                dataframe=new_dataframe,
+                sql_query=refined_sql,
+                analysis=analysis
+            )
+
+            context.add_bot_message(analysis)
+            logger.info(f"Query refined: {len(new_dataframe)} rows, {len(new_dataframe.columns)} columns")
+
+            return (analysis, False, None, None, "query_refinement")
+
+        except Exception as e:
+            logger.error(f"Error in query refinement: {e}")
+            response = f"Извините, произошла ошибка при уточнении запроса. Попробуйте переформулировать или задать новый запрос."
+            context.add_bot_message(response)
+            return (response, False, None, None, "query_refinement")
 
     def _handle_table_request(
         self,

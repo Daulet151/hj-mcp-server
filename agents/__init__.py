@@ -8,6 +8,7 @@ from .analytical_agent import AnalyticalAgent
 from .orchestrator import AgentOrchestrator
 from .smart_classifier import SmartIntentClassifier
 from .continuation_agent import ContinuationAgent
+from .query_refinement_agent import QueryRefinementAgent
 from .conversation_context import ConversationContext
 
 __all__ = [
@@ -17,5 +18,6 @@ __all__ = [
     'AgentOrchestrator',
     'SmartIntentClassifier',
     'ContinuationAgent',
+    'QueryRefinementAgent',
     'ConversationContext'
 ]

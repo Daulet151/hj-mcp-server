@@ -8,7 +8,7 @@ from utils.logger import setup_logger
 
 logger = setup_logger(__name__, "INFO")
 
-IntentType = Literal["continuation", "table_request", "new_data_query", "informational"]
+IntentType = Literal["continuation", "query_refinement", "table_request", "new_data_query", "informational"]
 
 
 class SmartIntentClassifier:
@@ -36,9 +36,9 @@ class SmartIntentClassifier:
 
 Твоя задача - определить интент пользователя с учётом КОНТЕКСТА предыдущего разговора.
 
-**4 типа интентов:**
+**5 типов интентов:**
 
-1. **continuation** - Продолжение разговора о предыдущих данных
+1. **continuation** - Продолжение разговора о предыдущих данных (БЕЗ изменения SQL)
    Признаки:
    - Уточняющие вопросы: "Как зовут?", "А сколько?", "Какой возраст?"
    - Местоимения: "этого юзера", "ему", "её", "первого", "последнего"
@@ -46,12 +46,26 @@ class SmartIntentClassifier:
    - Сравнения: "А по сравнению с прошлым годом?"
 
    Примеры:
-   ✓ "Как зовут этого юзера?" (после запроса о пользователях)
-   ✓ "А сколько ей лет?" (продолжение о конкретном пользователе)
-   ✓ "Покажи подробнее о первом" (уточнение из топа)
-   ✓ "А у него есть подписка?" (вопрос о конкретном человеке)
+   ✓ "Как зовут этого юзера?" (спрашивает имя из СУЩЕСТВУЮЩИХ данных)
+   ✓ "А сколько ей лет?" (возраст уже есть в данных)
+   ✓ "Покажи подробнее о первом" (детали из топа)
 
-2. **table_request** - Запрос на генерацию Excel таблицы
+2. **query_refinement** - Уточнение запроса, требующее МОДИФИКАЦИИ SQL
+   Признаки:
+   - "из них сколько..." → нужен дополнительный фильтр/JOIN
+   - "только мужчины/женщины" → добавить WHERE условие
+   - "с подпиской/без подписки" → добавить JOIN с другой таблицей
+   - "старше/младше N лет" → добавить фильтр
+   - "в определённом городе" → добавить условие
+
+   Примеры:
+   ✓ "из них сколько имеют ХП?" (нужен JOIN с подписками)
+   ✓ "только женщины" (добавить WHERE sex = 'female')
+   ✓ "старше 25 лет" (добавить WHERE age > 25)
+   ✓ "из Алматы" (добавить WHERE city = 'Almaty')
+   ✓ "с активной подпиской" (JOIN + фильтр)
+
+3. **table_request** - Запрос на генерацию Excel таблицы
    Признаки:
    - Явные подтверждения: "да", "yes", "давай", "ок", "конечно"
    - Просьбы о таблице: "сгенерируй", "выгрузи", "создай таблицу"
@@ -64,7 +78,7 @@ class SmartIntentClassifier:
    ✓ "выгрузи это в Excel"
    ✓ "хочу таблицу с топ-10"
 
-3. **new_data_query** - НОВЫЙ запрос на выгрузку данных
+4. **new_data_query** - НОВЫЙ запрос на выгрузку данных
    Признаки:
    - Полноценный новый запрос (не уточнение)
    - Слова: "выведи", "покажи", "сколько", "кто", "какие", "список"
@@ -76,7 +90,7 @@ class SmartIntentClassifier:
    ✓ "Сколько человек купили HeroPass на этой неделе?" (новый запрос)
    ✓ "Выведи топ по посещениям в ноябре" (другие данные)
 
-4. **informational** - Вопросы о боте/системе
+5. **informational** - Вопросы о боте/системе
    Признаки:
    - Вопросы о функционале
    - Запросы помощи
@@ -87,12 +101,18 @@ class SmartIntentClassifier:
    ✓ "Помощь"
    ✓ "Какие данные ты можешь показать?"
 
-**Ключевое правило:**
-Если есть предыдущие данные в памяти (has_pending_data=True) и сообщение содержит местоимения/уточнения → это **continuation**.
-Если это полноценный новый запрос с глаголами действия → это **new_data_query**.
+**Ключевые правила различия:**
+
+continuation vs query_refinement:
+- "Как зовут?" → continuation (ответ уже есть в данных)
+- "из них сколько имеют ХП?" → query_refinement (нужен новый SQL с JOIN)
+
+query_refinement vs new_data_query:
+- "из них только женщины" → query_refinement (модификация текущего запроса)
+- "покажи пользователей с подпиской" → new_data_query (совсем новый запрос)
 
 **Формат ответа:**
-Отвечай ТОЛЬКО одним словом: continuation, table_request, new_data_query, или informational
+Отвечай ТОЛЬКО одним словом: continuation, query_refinement, table_request, new_data_query, или informational
 Никаких объяснений!"""
 
     def classify_with_context(
@@ -139,7 +159,7 @@ class SmartIntentClassifier:
             classification = response.choices[0].message.content.strip().lower()
 
             # Validate response
-            valid_intents = ["continuation", "table_request", "new_data_query", "informational"]
+            valid_intents = ["continuation", "query_refinement", "table_request", "new_data_query", "informational"]
             if classification not in valid_intents:
                 logger.warning(f"Unexpected classification: {classification}, defaulting to new_data_query")
                 return "new_data_query"

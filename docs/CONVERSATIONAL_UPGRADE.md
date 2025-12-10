@@ -29,8 +29,9 @@ Bot: [generates Excel] ✅
 ### 1. **SmartIntentClassifier** (`agents/smart_classifier.py`)
 **Purpose:** Context-aware intent classification
 
-**4 Intent Types:**
-- `continuation` - Follow-up questions about existing data
+**5 Intent Types:**
+- `continuation` - Follow-up questions about existing data (no SQL modification)
+- `query_refinement` - Modify existing SQL based on follow-up (NEW!)
 - `table_request` - Request to generate Excel
 - `new_data_query` - New analytical query
 - `informational` - Questions about bot functionality
@@ -82,7 +83,48 @@ answer = continuation_agent.answer_followup(
 
 ---
 
-### 3. **ConversationContext** (`agents/conversation_context.py`)
+### 3. **QueryRefinementAgent** (`agents/query_refinement_agent.py`) 🆕
+**Purpose:** Modify existing SQL queries based on user refinements
+
+**Key Features:**
+- Takes original SQL and MODIFIES it (doesn't create from scratch)
+- Adds JOINs, filters, and conditions to existing query
+- Re-executes refined SQL and generates new analysis
+- Preserves original query logic and structure
+- Uses schema docs for proper table relationships
+
+**System Prompt Highlights:**
+- "НЕ пиши SQL с нуля! Бери существующий SQL и модифицируй его"
+- "Сохраняй логику оригинального запроса"
+- "Используй schema docs для правильных JOIN'ов"
+
+**Example:**
+```python
+# User asks: "Сколько атлетов вступило в кланы в сентябре?"
+# Original SQL: SELECT COUNT(*) FROM userclantransaction WHERE month = 'September'
+
+# User follows up: "из них сколько имеют ХП?"
+analysis, new_df, refined_sql = query_refinement_agent.refine_query(
+    original_sql="SELECT COUNT(*) FROM userclantransaction...",
+    original_user_query="Сколько атлетов вступило в кланы в сентябре?",
+    refinement_request="из них сколько имеют ХП?",
+    sql_generator=sql_generator,
+    db_manager=db_manager
+)
+
+# Refined SQL adds JOIN:
+# SELECT COUNT(DISTINCT uct.user)
+# FROM userclantransaction uct
+# JOIN userheropass uhp ON uct.user = uhp.user
+# WHERE month = 'September' AND uhp.status = 'active'
+```
+
+**Critical Use Case:**
+Solves the exact problem described by the user where asking "из них сколько имеют ХП?" should modify the previous SQL query rather than starting from scratch.
+
+---
+
+### 4. **ConversationContext** (`agents/conversation_context.py`)
 **Purpose:** Store conversation state and data
 
 **Stores:**
@@ -116,7 +158,7 @@ if context.is_expired():
 
 ---
 
-### 4. **Enhanced Orchestrator** (`agents/orchestrator.py`)
+### 5. **Enhanced Orchestrator** (`agents/orchestrator.py`)
 **Purpose:** Route messages to appropriate handlers
 
 **New Architecture:**
@@ -128,14 +170,16 @@ Fast Path Check (simple yes/no)
 Smart Classification (with context)
     ↓
 Route to Handler:
-    - continuation → ContinuationAgent
+    - continuation → ContinuationAgent (answer from existing data)
+    - query_refinement → QueryRefinementAgent (modify SQL & re-execute) 🆕
     - table_request → Excel Generation
-    - new_data_query → AnalyticalAgent
-    - informational → InformationalAgent
+    - new_data_query → AnalyticalAgent (new SQL query)
+    - informational → InformationalAgent (bot info)
 ```
 
 **Key Methods:**
-- `_handle_continuation()` - Use data in memory
+- `_handle_continuation()` - Use data in memory (no new SQL)
+- `_handle_query_refinement()` - Modify existing SQL and re-execute 🆕
 - `_handle_table_request()` - Generate Excel
 - `_handle_new_data_query()` - Execute new SQL
 - `_handle_informational()` - Answer about bot
