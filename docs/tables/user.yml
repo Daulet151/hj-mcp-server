@@ -1,0 +1,546 @@
+table: raw.user
+description: "Основная таблица пользователей системы (атлеты, клиенты)"
+grain: "id (один пользователь = одна запись)"
+freshness_sla_hours: 0  # Обновляется в реальном времени
+timezone: "Asia/Almaty"
+
+columns:
+  - name: id
+    type: varchar(24)
+    role: PK
+    description: "Уникальный идентификатор пользователя"
+    synonyms_ru: ["ID пользователя", "идентификатор клиента", "user ID"]
+    null_semantics: "NOT NULL"
+
+  - name: username
+    type: text
+    description: "Логин пользователя в системе"
+    synonyms_ru: ["логин", "имя пользователя", "username"]
+    null_semantics: "NULL = пользователь не задал username"
+
+  - name: nickname
+    type: text
+    description: "Никнейм пользователя (отображаемое имя)"
+    synonyms_ru: ["ник", "прозвище", "nickname"]
+    null_semantics: "NULL = никнейм не задан"
+
+  - name: firstname
+    type: text
+    description: "Имя пользователя"
+    synonyms_ru: ["имя", "first name"]
+    null_semantics: "NULL = имя не указано"
+
+  - name: lastname
+    type: text
+    description: "Фамилия пользователя"
+    synonyms_ru: ["фамилия", "last name"]
+    null_semantics: "NULL = фамилия не указана"
+
+  - name: country
+    type: text
+    description: "Страна проживания"
+    synonyms_ru: ["страна", "государство"]
+    null_semantics: "NULL = страна не указана"
+
+  - name: city
+    type: text
+    description: "Город проживания"
+    synonyms_ru: ["город", "населенный пункт"]
+    null_semantics: "NULL = город не указан"
+
+  - name: password
+    type: text
+    description: "Хешированный пароль пользователя"
+    synonyms_ru: ["пароль"]
+    business_notes: "⚠️ PII - содержит хешированный пароль. Не выгружать в аналитику!"
+    null_semantics: "NULL = пользователь не установил пароль (вход через OAuth)"
+
+  - name: email
+    type: text
+    description: "Email пользователя"
+    synonyms_ru: ["электронная почта", "мейл", "e-mail"]
+    business_notes: "⚠️ PII - персональные данные"
+    null_semantics: "NULL = email не указан"
+
+  - name: token
+    type: text
+    description: "Токен авторизации пользователя"
+    synonyms_ru: ["токен", "auth token"]
+    business_notes: "⚠️ Не выгружать - конфиденциальная информация!"
+    null_semantics: "NULL = токен не сгенерирован"
+
+  - name: _class
+    type: text
+    description: "Класс объекта (техническое поле для ORM)"
+    business_notes: "Служебное поле MongoDB/ORM"
+
+  - name: role
+    type: raw.role
+    description: "Роль пользователя в системе"
+    synonyms_ru: ["роль", "права доступа"]
+    business_notes: "⚠️ ВАЖНО: Принимает только значения из ENUM raw.role. Проверьте допустимые значения в определении типа!"
+    null_semantics: "NULL = роль не назначена"
+
+  - name: googleid
+    type: text
+    description: "ID пользователя в Google (для OAuth)"
+    synonyms_ru: ["Google ID", "гугл айди"]
+    null_semantics: "NULL = пользователь не входил через Google"
+
+  - name: facebookid
+    type: text
+    description: "ID пользователя в Facebook (для OAuth)"
+    synonyms_ru: ["Facebook ID", "фейсбук айди"]
+    null_semantics: "NULL = пользователь не входил через Facebook"
+
+  - name: appleid
+    type: text
+    description: "ID пользователя в Apple (для OAuth)"
+    synonyms_ru: ["Apple ID", "эпл айди"]
+    null_semantics: "NULL = пользователь не входил через Apple"
+
+  - name: points
+    type: float8
+    description: "Общее количество баллов пользователя за все время"
+    synonyms_ru: ["баллы", "очки", "поинты", "points"]
+    business_notes: "Основная метрика активности пользователя"
+    null_semantics: "NULL = 0 баллов"
+
+  - name: pointsforweek
+    type: float8
+    description: "Количество баллов за текущую неделю"
+    synonyms_ru: ["баллы за неделю", "недельные очки"]
+    business_notes: "Обнуляется каждую неделю"
+    null_semantics: "NULL = 0 баллов за неделю"
+
+  - name: pointsformonth
+    type: float8
+    description: "Количество баллов за текущий месяц"
+    synonyms_ru: ["баллы за месяц", "месячные очки"]
+    business_notes: "Обнуляется каждый месяц"
+    null_semantics: "NULL = 0 баллов за месяц"
+
+  - name: sex
+    type: raw.sex
+    description: "Пол пользователя"
+    synonyms_ru: ["пол", "гендер"]
+    business_notes: "⚠️ ВАЖНО: Принимает только значения из ENUM raw.sex. Проверьте допустимые значения в определении типа!"
+    null_semantics: "NULL = пол не указан"
+
+  - name: isboughttickets
+    type: bool
+    description: "Покупал ли пользователь билеты"
+    synonyms_ru: ["покупал билеты", "есть покупка билетов"]
+    null_semantics: "NULL = не покупал"
+
+  - name: dumbbells
+    type: float8
+    description: "Количество гантелей (внутренняя валюта)"
+    synonyms_ru: ["гантели", "гантельки", "dumbbells"]
+    business_notes: "Виртуальная валюта в приложении"
+    null_semantics: "NULL = 0 гантелей"
+
+  - name: tickets
+    type: float8
+    description: "Количество обычных билетов"
+    synonyms_ru: ["билеты", "тикеты", "tickets"]
+    null_semantics: "NULL = 0 билетов"
+
+  - name: outsidertickets
+    type: float8
+    description: "Количество билетов для посторонних"
+    synonyms_ru: ["билеты для аутсайдеров"]
+    null_semantics: "NULL = 0 билетов"
+
+  - name: goldentickets
+    type: float8
+    description: "Количество золотых билетов"
+    synonyms_ru: ["золотые билеты", "голден тикеты"]
+    business_notes: "Премиум билеты с особыми привилегиями"
+    null_semantics: "NULL = 0 золотых билетов"
+
+  - name: assessmenttickets
+    type: float8
+    description: "Количество билетов для оценки"
+    synonyms_ru: ["билеты для assessment"]
+    null_semantics: "NULL = 0 билетов"
+
+  - name: educationtickets
+    type: float8
+    description: "Количество образовательных билетов"
+    synonyms_ru: ["образовательные билеты", "учебные билеты"]
+    null_semantics: "NULL = 0 билетов"
+
+  - name: guesttickets
+    type: float8
+    description: "Количество гостевых билетов"
+    synonyms_ru: ["гостевые билеты"]
+    null_semantics: "NULL = 0 билетов"
+
+  - name: marathontickets
+    type: float8
+    description: "Количество марафонных билетов"
+    synonyms_ru: ["марафонные билеты"]
+    null_semantics: "NULL = 0 билетов"
+
+  - name: specialtickets
+    type: float8
+    description: "Количество специальных билетов"
+    synonyms_ru: ["специальные билеты"]
+    null_semantics: "NULL = 0 билетов"
+
+  - name: isinvictusclient
+    type: bool
+    description: "Является ли клиентом Invictus"
+    synonyms_ru: ["клиент invictus", "инвиктус клиент"]
+    null_semantics: "NULL = false (не является)"
+
+  - name: isguestclient
+    type: bool
+    description: "Является ли гостевым клиентом"
+    synonyms_ru: ["гостевой клиент", "guest client"]
+    null_semantics: "NULL = false (не является)"
+
+  - name: birthday
+    type: text
+    description: "Дата рождения пользователя"
+    synonyms_ru: ["день рождения", "ДР", "дата рождения"]
+    business_notes: "⚠️ PII - персональные данные. Формат может варьироваться"
+    null_semantics: "NULL = дата рождения не указана"
+
+  - name: phonenumber
+    type: text
+    description: "Номер телефона пользователя"
+    synonyms_ru: ["телефон", "номер телефона", "phone"]
+    business_notes: "⚠️ PII - персональные данные"
+    null_semantics: "NULL = телефон не указан"
+
+  - name: iinnumber
+    type: text
+    description: "ИИН пользователя (Индивидуальный идентификационный номер)"
+    synonyms_ru: ["ИИН", "индивидуальный номер"]
+    business_notes: "⚠️ PII - строго конфиденциальная информация! Не выгружать!"
+    null_semantics: "NULL = ИИН не указан"
+
+  - name: useravatarurl
+    type: text
+    description: "URL аватара пользователя"
+    synonyms_ru: ["аватар", "фото профиля", "avatar"]
+    null_semantics: "NULL = аватар не загружен"
+
+  - name: instagramurl
+    type: text
+    description: "Ссылка на Instagram профиль"
+    synonyms_ru: ["инстаграм", "instagram", "инста"]
+    null_semantics: "NULL = Instagram не указан"
+
+  - name: occupation
+    type: text
+    description: "Род занятий пользователя"
+    synonyms_ru: ["профессия", "занятие", "работа"]
+    null_semantics: "NULL = не указано"
+
+  - name: _from
+    type: text
+    description: "Источник регистрации пользователя"
+    synonyms_ru: ["откуда пришел", "источник", "source"]
+    business_notes: "Маркетинговая информация о канале привлечения"
+    null_semantics: "NULL = источник неизвестен"
+
+  - name: utmsource
+    type: text
+    description: "UTM source (источник трафика)"
+    synonyms_ru: ["utm source", "источник utm"]
+    business_notes: "Маркетинговая метка для отслеживания источника трафика"
+    null_semantics: "NULL = не отслеживается"
+
+  - name: utmcampaign
+    type: text
+    description: "UTM campaign (название кампании)"
+    synonyms_ru: ["utm campaign", "кампания utm"]
+    business_notes: "Маркетинговая метка для отслеживания рекламной кампании"
+    null_semantics: "NULL = не отслеживается"
+
+  - name: utmmedium
+    type: text
+    description: "UTM medium (канал трафика)"
+    synonyms_ru: ["utm medium", "канал utm"]
+    business_notes: "Маркетинговая метка для отслеживания канала (cpc, email, social и т.д.)"
+    null_semantics: "NULL = не отслеживается"
+
+  - name: contactid
+    type: float8
+    description: "ID контакта в CRM системе"
+    synonyms_ru: ["contact id", "айди контакта"]
+    business_notes: "Связь с внешней CRM системой"
+    null_semantics: "NULL = не связан с CRM"
+
+  - name: leadid
+    type: float8
+    description: "ID лида в CRM системе"
+    synonyms_ru: ["lead id", "айди лида"]
+    business_notes: "Связь с системой управления лидами"
+    null_semantics: "NULL = не является лидом"
+
+  - name: isbonusadded
+    type: bool
+    description: "Был ли добавлен бонус"
+    synonyms_ru: ["бонус добавлен", "есть бонус"]
+    null_semantics: "NULL = false (бонус не добавлен)"
+
+  - name: shortcode
+    type: text
+    description: "Короткий код пользователя (реферальный код)"
+    synonyms_ru: ["код", "реферальный код", "короткий код"]
+    business_notes: "Используется для реферальной программы"
+    null_semantics: "NULL = код не сгенерирован"
+
+  - name: cyclecount
+    type: float8
+    description: "Количество циклов"
+    synonyms_ru: ["циклы", "count циклов"]
+    business_notes: "Количество пройденных тренировочных циклов"
+    null_semantics: "NULL = 0 циклов"
+
+  - name: refresh_token
+    type: text
+    description: "Refresh token для обновления доступа"
+    synonyms_ru: ["рефреш токен"]
+    business_notes: "⚠️ Не выгружать - конфиденциальная информация!"
+    null_semantics: "NULL = токен не сгенерирован"
+
+  - name: access_token
+    type: text
+    description: "Access token для доступа к API"
+    synonyms_ru: ["токен доступа"]
+    business_notes: "⚠️ Не выгружать - конфиденциальная информация!"
+    null_semantics: "NULL = токен не сгенерирован"
+
+  - name: takenlockid
+    type: float8
+    description: "ID заблокированного замка"
+    synonyms_ru: ["замок", "lock id"]
+    business_notes: "Используется для физических замков в клубе"
+    null_semantics: "NULL = замок не занят"
+
+  - name: heropathlevels
+    type: text
+    description: "Уровни прохождения пути героя (JSON)"
+    synonyms_ru: ["путь героя", "hero path", "уровни героя"]
+    business_notes: "Хранится в формате JSON или текста. Отражает прогресс в игровой механике"
+    null_semantics: "NULL = путь не начат"
+
+  - name: accesstopost
+    type: bool
+    description: "Есть ли доступ к постам"
+    synonyms_ru: ["доступ к постам", "может постить"]
+    null_semantics: "NULL = false (нет доступа)"
+
+  - name: isblocked
+    type: bool
+    description: "Заблокирован ли пользователь"
+    synonyms_ru: ["заблокирован", "в бане", "blocked"]
+    business_notes: "true = пользователь заблокирован и не может использовать систему"
+    null_semantics: "NULL = false (не заблокирован)"
+
+  - name: isdeleted
+    type: bool
+    description: "Удален ли пользователь (soft delete)"
+    synonyms_ru: ["удален", "в корзине"]
+    business_notes: "true = пользователь удален, но данные сохранены"
+    null_semantics: "NULL = false (не удален)"
+
+  - name: causeblocking
+    type: text
+    description: "Причина блокировки пользователя"
+    synonyms_ru: ["причина блокировки", "за что забанен"]
+    business_notes: "Заполняется только если isblocked = true"
+    null_semantics: "NULL = не заблокирован или причина не указана"
+
+  - name: backgroundimage
+    type: text
+    description: "URL фонового изображения профиля"
+    synonyms_ru: ["фон профиля", "обложка"]
+    null_semantics: "NULL = фон не установлен"
+
+  - name: inclub
+    type: bool
+    description: "Находится ли пользователь в клубе (физически)"
+    synonyms_ru: ["в клубе", "на территории"]
+    business_notes: "Отслеживание физического присутствия в клубе"
+    null_semantics: "NULL = false (не в клубе)"
+
+  - name: sensorid
+    type: text
+    description: "ID датчика/сенсора пользователя"
+    synonyms_ru: ["датчик", "sensor", "сенсор"]
+    business_notes: "Связь с носимыми устройствами или датчиками в клубе"
+    null_semantics: "NULL = датчик не привязан"
+
+  - name: age
+    type: float8
+    description: "Возраст пользователя"
+    synonyms_ru: ["возраст", "лет"]
+    business_notes: "Может вычисляться из birthday или указываться вручную"
+    null_semantics: "NULL = возраст не указан"
+
+  - name: weight
+    type: float8
+    description: "Вес пользователя (кг)"
+    synonyms_ru: ["вес", "масса тела", "килограммы"]
+    business_notes: "Используется для расчета тренировочных нагрузок"
+    null_semantics: "NULL = вес не указан"
+
+  - name: height
+    type: float8
+    description: "Рост пользователя (см)"
+    synonyms_ru: ["рост", "высота"]
+    business_notes: "Используется для расчета индекса массы тела"
+    null_semantics: "NULL = рост не указан"
+
+  - name: level
+    type: varchar(24)
+    role: FK
+    description: "ID уровня пользователя"
+    synonyms_ru: ["уровень", "level", "ранг"]
+    business_notes: "Ссылается на таблицу с уровнями (level.id)"
+    null_semantics: "NULL = уровень не назначен"
+
+  - name: hero
+    type: varchar(24)
+    role: FK
+    description: "ID выбранного героя"
+    synonyms_ru: ["герой", "персонаж"]
+    business_notes: "Ссылается на таблицу героев (hero.id)"
+    null_semantics: "NULL = герой не выбран"
+
+  - name: trainer
+    type: varchar(24)
+    role: FK
+    description: "ID тренера пользователя"
+    synonyms_ru: ["тренер", "coach", "наставник"]
+    business_notes: "Ссылается на таблицу тренеров (trainer.id)"
+    null_semantics: "NULL = тренер не назначен"
+
+  - name: defaultcard
+    type: varchar(24)
+    role: FK
+    description: "ID карты по умолчанию для оплаты"
+    synonyms_ru: ["карта по умолчанию", "основная карта"]
+    business_notes: "Ссылается на таблицу карт (card.id)"
+    null_semantics: "NULL = карта не привязана"
+
+  - name: cards
+    type: _varchar
+    description: "Массив ID привязанных карт"
+    synonyms_ru: ["карты", "все карты", "список карт"]
+    business_notes: "PostgreSQL array type - хранит несколько ID карт"
+    null_semantics: "NULL = нет привязанных карт"
+
+  - name: shareduser
+    type: varchar(24)
+    role: FK
+    description: "ID пользователя с которым расшарен доступ"
+    synonyms_ru: ["расшаренный пользователь", "shared user"]
+    business_notes: "Для функционала совместного доступа"
+    null_semantics: "NULL = нет расшаренных пользователей"
+
+  - name: sharedhw
+    type: varchar(24)
+    role: FK
+    description: "ID расшаренного домашнего задания"
+    synonyms_ru: ["расшаренное ДЗ", "shared homework"]
+    null_semantics: "NULL = нет расшаренного ДЗ"
+
+  - name: club
+    type: varchar(24)
+    role: FK
+    description: "ID клуба/команды пользователя"
+    synonyms_ru: ["клуб", "команда", "клан"]
+    business_notes: "Ссылается на таблицу кланов (clan.id)"
+    null_semantics: "NULL = не состоит в клубе"
+
+  - name: partnershiptype
+    type: varchar(24)
+    role: FK
+    description: "Тип партнерства"
+    synonyms_ru: ["тип партнерства", "partnership"]
+    business_notes: "Ссылается на справочник типов партнерства"
+    null_semantics: "NULL = нет партнерства"
+
+  - name: salt
+    type: text
+    description: "Соль для хеширования пароля"
+    synonyms_ru: ["соль пароля"]
+    business_notes: "⚠️ Не выгружать - конфиденциальная информация для безопасности!"
+    null_semantics: "NULL = соль не используется"
+
+  - name: istestfarmer
+    type: bool
+    description: "Является ли тестовым пользователем (farmer)"
+    synonyms_ru: ["тестовый", "test user", "фармер"]
+    business_notes: "true = это тестовый аккаунт, исключать из продуктовой аналитики!"
+    null_semantics: "NULL = false (не тестовый)"
+
+  - name: updated_at
+    type: timestamp
+    description: "Дата и время последнего обновления записи"
+    synonyms_ru: ["дата обновления", "последнее изменение"]
+    null_semantics: "NULL = не было обновлений после создания"
+
+  - name: created_at
+    type: timestamp
+    description: "Дата и время создания записи (регистрации пользователя)"
+    synonyms_ru: ["дата создания", "дата регистрации", "когда зарегистрировался"]
+    business_notes: "Время первой регистрации в системе (Asia/Almaty)"
+    null_semantics: "NULL = дата создания не зафиксирована"
+
+  - name: is_dropped
+    type: bool
+    description: "Была ли запись удалена (soft delete)"
+    synonyms_ru: ["удалено", "в корзине", "архивировано"]
+    business_notes: "true = запись удалена, но данные сохранены"
+    null_semantics: "NULL или false = активная запись"
+
+business_rules:
+  - "Заблокированные: WHERE isblocked = true"
+  - "Удаленные: WHERE isdeleted = true OR is_dropped = true"
+  - "Тестовые пользователи (исключать из аналитики): WHERE istestfarmer = true"
+  - "Реальные пользователи: WHERE (istestfarmer IS NULL OR istestfarmer = false)"
+  - "Пользователи с баллами: WHERE points > 0"
+  - "Новые пользователи (последние 7 дней): WHERE created_at >= NOW() - INTERVAL '7 days'"
+  - "Клиенты Invictus: WHERE isinvictusclient = true"
+  - "Пользователи в клубах: WHERE club IS NOT NULL"
+  - "OAuth пользователи: WHERE googleid IS NOT NULL OR facebookid IS NOT NULL OR appleid IS NOT NULL"
+  - "Пользователи с email: WHERE email IS NOT NULL"
+  - "Пользователи без телефона: WHERE phonenumber IS NULL"
+  - "Мужчины/Женщины: WHERE sex = 'значение из ENUM'"
+  - "Пользователи с покупками: WHERE isboughttickets = true"
+  - "Пользователи в клубе (физически): WHERE inclub = true"
+  - "Топ по баллам: ORDER BY points DESC LIMIT N"
+  - "Лидеры недели: ORDER BY pointsforweek DESC LIMIT N"
+  - "Лидеры месяца: ORDER BY pointsformonth DESC LIMIT N"
+
+tests:
+  - "unique(id)"
+  - "not_null(id)"
+
+pii: true
+
+business_notes:
+  - "⚠️ PII WARNING: Таблица содержит персональные данные (email, phonenumber, iinnumber, birthday, password, tokens). Соблюдайте требования защиты данных!"
+  - "⚠️ ВАЖНО: Для продуктовой аналитики исключайте тестовых пользователей: WHERE (istestfarmer IS NULL OR istestfarmer = false)"
+  - "⚠️ ВАЖНО: Колонки role и sex принимают только значения из соответствующих ENUM типов. Проверьте определения типов!"
+  - "Основная таблица для анализа пользователей - содержит демографию, активность, монетизацию"
+  - "Для получения полной информации делайте JOIN с таблицами: level, hero, trainer, clan, card"
+  - "Поля points, pointsforweek, pointsformonth - ключевые метрики для геймификации"
+  - "Различные типы билетов (tickets, goldentickets, marathontickets и др.) - виртуальные товары"
+  - "dumbbells - основная внутренняя валюта приложения"
+  - "UTM метки (utmsource, utmcampaign, utmmedium) используются для маркетинговой атрибуции"
+  - "OAuth поля (googleid, facebookid, appleid) - для пользователей, вошедших через социальные сети"
+  - "Для активных записей всегда проверяйте: (is_dropped IS NULL OR is_dropped = false) AND (isdeleted IS NULL OR isdeleted = false)"
+  - "causeblocking содержит текстовую причину блокировки, если isblocked = true"
+  - "cards - массив (array type), может содержать несколько ID карт"
+  - "Физическое присутствие в клубе отслеживается через поле inclub"
+  - "takenlockid используется для управления физическими замками в раздевалках"
+  - "heropathlevels хранит JSON с прогрессом игровой механики 'Путь героя'"

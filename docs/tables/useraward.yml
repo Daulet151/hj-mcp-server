@@ -1,0 +1,136 @@
+table: raw.useraward
+description: "Награды пользователей (достижения, медали, призы)"
+grain: "id (одна награда = одна запись о получении награды пользователем)"
+freshness_sla_hours: 0  # Обновляется в реальном времени
+timezone: "Asia/Almaty"
+
+columns:
+  - name: id
+    type: varchar(24)
+    role: PK
+    description: "Уникальный идентификатор записи о награде"
+    synonyms_ru: ["ID награды", "идентификатор"]
+    null_semantics: "NOT NULL"
+
+  - name: "user"
+    type: varchar(24)
+    role: FK
+    description: "ID пользователя, который получил награду"
+    synonyms_ru: ["пользователь", "атлет", "кто получил"]
+    business_notes: "Ссылается на user.id"
+    null_semantics: "NULL = награда не привязана к пользователю"
+
+  - name: award
+    type: varchar(24)
+    role: FK
+    description: "ID типа награды"
+    synonyms_ru: ["награда", "тип награды", "achievement"]
+    business_notes: "Ссылается на справочник наград (award.id)"
+    null_semantics: "NULL = тип награды не указан"
+
+  - name: marathonevent
+    type: varchar(24)
+    role: FK
+    description: "ID марафонного события, за которое получена награда"
+    synonyms_ru: ["марафон", "программа"]
+    business_notes: "Ссылается на marathonevent.id. Заполняется только для наград за марафоны"
+    null_semantics: "NULL = награда не связана с марафоном"
+
+  - name: hasuserseen
+    type: bool
+    description: "Видел ли пользователь уведомление о награде"
+    synonyms_ru: ["просмотрено", "увидел", "прочитано"]
+    business_notes: "false = новая награда, нужно показать уведомление; true = пользователь уже видел"
+    null_semantics: "NULL = false (не видел)"
+
+  - name: name
+    type: text
+    description: "Название награды"
+    synonyms_ru: ["название", "имя награды", "title"]
+    business_notes: |
+      Может дублировать название из справочника award или быть кастомным.
+      Примеры наград в системе: 'Трижды неравнодушный', 'Золото 42', 'Золото', 'Перфекционист',
+      'Не сдаваться', 'Рутина', 'Крепыш', 'Серебро', 'Зацени бицуху', 'Смысл жизни',
+      'Показатели в норме', 'Супергерой', 'Быстрее, сильнее, мощнее', 'Это только разминка',
+      'Кровью и потом', 'Что ты такое?', 'Железная воля', 'Новая привычка', 'Бронза', 'Герой',
+      'Работа', 'Это снова я', 'Неравнодушный', 'Мне как обычно', 'Платина', 'Хобби'
+    null_semantics: "NULL = название не задано"
+
+  - name: description
+    type: text
+    description: "Описание награды"
+    synonyms_ru: ["описание", "за что награда", "детали"]
+    business_notes: "Текстовое описание того, за что получена награда"
+    null_semantics: "NULL = описание отсутствует"
+
+  - name: imageurl
+    type: text
+    description: "URL изображения награды (иконка, медаль)"
+    synonyms_ru: ["картинка", "изображение", "иконка награды"]
+    business_notes: "Ссылка на изображение для отображения в UI"
+    null_semantics: "NULL = изображение не установлено"
+
+  - name: type
+    type: text
+    description: "Тип награды"
+    synonyms_ru: ["тип", "категория награды"]
+    business_notes: "Категоризация наград (например: 'achievement', 'medal', 'trophy', 'badge')"
+    null_semantics: "NULL = тип не указан"
+
+  - name: requiredamount
+    type: int4
+    description: "Требуемое количество для получения награды"
+    synonyms_ru: ["требуемое количество", "нужно для получения", "порог"]
+    business_notes: "Количество баллов/действий/тренировок необходимое для получения награды"
+    null_semantics: "NULL = количество не требуется или не применимо"
+
+  - name: created_at
+    type: timestamp
+    description: "Дата и время получения награды (Asia/Almaty)"
+    synonyms_ru: ["дата получения", "когда получил", "время награждения"]
+    business_notes: "Время когда пользователь получил эту награду"
+    null_semantics: "NULL = дата создания не зафиксирована"
+
+  - name: updated_at
+    type: timestamp
+    description: "Дата и время последнего обновления записи"
+    synonyms_ru: ["дата обновления", "последнее изменение"]
+    business_notes: "Обновляется при изменении полей (например, hasuserseen)"
+    null_semantics: "NULL = не было обновлений после создания"
+
+business_rules:
+  - "Все награды пользователя: WHERE user = 'user_id'"
+  - "Непросмотренные награды: WHERE hasuserseen = false OR hasuserseen IS NULL"
+  - "Просмотренные награды: WHERE hasuserseen = true"
+  - "Награды за марафоны: WHERE marathonevent IS NOT NULL"
+  - "Обычные награды (не марафон): WHERE marathonevent IS NULL"
+  - "Награды по типу: WHERE type = 'тип_награды'"
+  - "Конкретная награда по названию: WHERE name = 'название награды' (например, 'Золото', 'Платина', 'Герой')"
+  - "Поиск наград по части названия: WHERE name ILIKE '%часть_названия%'"
+  - "Металлические награды: WHERE name IN ('Золото', 'Серебро', 'Бронза', 'Платина')"
+  - "Недавние награды (последние 7 дней): WHERE created_at >= NOW() - INTERVAL '7 days'"
+  - "Награды за период: WHERE created_at BETWEEN date1 AND date2"
+  - "Подсчет наград пользователя: SELECT user, COUNT(*) FROM useraward GROUP BY user"
+  - "Топ по количеству наград: SELECT user, COUNT(*) as award_count FROM useraward GROUP BY user ORDER BY award_count DESC"
+  - "Награды с высоким порогом: WHERE requiredamount > N"
+  - "Сортировка по новизне: ORDER BY created_at DESC"
+  - "Популярные награды: SELECT name, COUNT(*) as count FROM useraward GROUP BY name ORDER BY count DESC"
+
+tests:
+  - "unique(id)"
+  - "not_null(id)"
+  - "relationships(user -> user.id, award -> award.id, marathonevent -> marathonevent.id)"
+
+pii: false
+
+business_notes:
+  - "Таблица хранит факты получения наград пользователями (не справочник наград, а конкретные выданные награды)"
+  - "Для получения полной информации о награде делайте JOIN с таблицей award по полю award"
+  - "Для получения информации о пользователе делайте JOIN с таблицей user по полю user"
+  - "Для наград за марафоны делайте JOIN с таблицей marathonevent по полю marathonevent"
+  - "hasuserseen используется для отображения бейджа 'новая награда' в UI"
+  - "Поля name, description, imageurl, type, requiredamount могут дублировать данные из справочника award для денормализации"
+  - "created_at - ключевое поле для определения когда пользователь получил награду"
+  - "requiredamount показывает порог достижения (например, '100 тренировок' или '1000 баллов')"
+  - "Награды не удаляются (нет поля is_dropped) - это постоянная история достижений пользователя"
+  - "Одна и та же награда (award) может быть выдана пользователю несколько раз с разными id"
