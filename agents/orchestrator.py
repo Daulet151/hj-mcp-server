@@ -1,30 +1,26 @@
 """
-Enhanced Agent Orchestrator with Conversational Memory
-Coordinates all agents and manages conversation state with ChatGPT-like continuity
+Agent Orchestrator
+Coordinates all agents and manages conversation state
 """
 from typing import Dict, Any, Optional, Tuple
-from .classifier import QueryClassifier  # Keep old classifier as fallback
-from .smart_classifier import SmartIntentClassifier  # New smart classifier
+from enum import Enum
+from .classifier import QueryClassifier
 from .informational_agent import InformationalAgent
 from .analytical_agent import AnalyticalAgent
-from .continuation_agent import ContinuationAgent  # New agent for follow-ups
-from .query_refinement_agent import QueryRefinementAgent  # New agent for SQL modifications
-from .conversation_context import ConversationContext  # New context storage
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__, "INFO")
 
 
-class AgentOrchestrator:
-    """
-    Enhanced orchestrator with conversational memory and context awareness.
+class ConversationState(Enum):
+    """Possible states of conversation."""
+    INITIAL = "initial"
+    WAITING_FOR_CONFIRMATION = "waiting_for_confirmation"
+    GENERATING_TABLE = "generating_table"
 
-    New features:
-    - Maintains conversation history
-    - Handles follow-up questions using data in memory
-    - Smart intent detection with context
-    - ChatGPT-like natural conversation flow
-    """
+
+class AgentOrchestrator:
+    """Orchestrates multiple agents and manages conversation flow."""
 
     def __init__(
         self,
@@ -44,8 +40,7 @@ class AgentOrchestrator:
             db_manager: DatabaseManager instance
             model: Model to use for agents
         """
-        # Existing agents (keep backward compatibility)
-        self.basic_classifier = QueryClassifier(api_key, model)
+        self.classifier = QueryClassifier(api_key, model)
         self.informational_agent = InformationalAgent(api_key, model)
         self.analytical_agent = AnalyticalAgent(
             api_key,
@@ -55,18 +50,9 @@ class AgentOrchestrator:
             model
         )
 
-        # NEW: Smart agents for conversational flow
-        self.smart_classifier = SmartIntentClassifier(api_key, model)
-        self.continuation_agent = ContinuationAgent(api_key, model)
-        self.query_refinement_agent = QueryRefinementAgent(api_key, schema_docs, model)
-
-        # Store references for query refinement agent
-        self.sql_generator = sql_generator
-        self.db_manager = db_manager
-
-        # NEW: Enhanced conversation storage
-        # Key: (user_id, channel_id), Value: ConversationContext
-        self.conversations: Dict[Tuple[str, str], ConversationContext] = {}
+        # Conversation state management
+        # Key: (user_id, channel_id), Value: {state, last_query}
+        self.conversations: Dict[Tuple[str, str], Dict[str, Any]] = {}
 
     def process_message(
         self,
@@ -77,8 +63,6 @@ class AgentOrchestrator:
         """
         Process user message and return appropriate response.
 
-        ENHANCED: Now handles conversational follow-ups and context.
-
         Args:
             user_message: User's message
             user_id: Slack user ID
@@ -88,319 +72,157 @@ class AgentOrchestrator:
             Tuple of (response_text, should_generate_table, data_context, original_query, query_type)
             - response_text: Text to send to user
             - should_generate_table: True if we should generate Excel table
-            - data_context: Dict with 'dataframe' and 'sql_query' (if available)
-            - original_query: Original user query for table generation
-            - query_type: Type of query (informational, data_extraction, continuation, table_request)
+            - data_context: Dict with 'dataframe' and 'sql_query' (if available from analysis)
+            - original_query: Original user query for table generation (None if not applicable)
+            - query_type: Type of query (informational, data_extraction, or None)
         """
         conversation_key = (user_id, channel_id)
+        conversation = self.conversations.get(conversation_key, {
+            "state": ConversationState.INITIAL,
+            "last_query": None,
+            "dataframe": None,
+            "sql_query": None,
+            "query_type": None
+        })
 
-        # Get or create conversation context
-        if conversation_key not in self.conversations:
-            self.conversations[conversation_key] = ConversationContext(timeout_minutes=30)
-            logger.info(f"Created new conversation context for {conversation_key}")
+        current_state = conversation["state"]
+        logger.info(f"Processing message in state: {current_state.value}")
 
-        context = self.conversations[conversation_key]
+        # Check if user is confirming table generation
+        if current_state == ConversationState.WAITING_FOR_CONFIRMATION:
+            is_confirmation = self._is_confirmation(user_message)
 
-        # Check if context expired due to inactivity
-        if context.is_expired():
-            logger.info(f"Context expired for {conversation_key}, resetting")
-            context.clear_all()
+            if is_confirmation:
+                # User confirmed - generate table
+                # Save data BEFORE resetting conversation
+                original_query = conversation.get("last_query")
+                dataframe = conversation.get("dataframe")
+                sql_query = conversation.get("sql_query")
+                query_type = conversation.get("query_type")
 
-        # Add user message to history
-        context.add_user_message(user_message)
+                logger.info("User confirmed table generation")
+                self._reset_conversation(conversation_key)
 
-        logger.info(f"Processing message. Context: {context}")
+                # Return data context so app.py can use cached results
+                data_context = {
+                    "dataframe": dataframe,
+                    "sql_query": sql_query
+                }
 
-        # FAST PATH: Check for simple confirmations first
-        if self.smart_classifier.is_simple_confirmation(user_message):
-            if context.has_dataframe():
-                logger.info("Simple confirmation detected -> generating table")
-                return self._handle_table_request(context, user_message)
+                return (
+                    "Отлично! Генерирую таблицу для вас... ⏳",
+                    True,  # Should generate table
+                    data_context,  # Cached data from analysis
+                    original_query,  # Original query
+                    query_type  # Query type
+                )
             else:
-                logger.info("Confirmation but no data -> informational response")
-                response = "У меня нет данных для генерации таблицы. Задайте сначала аналитический запрос."
-                context.add_bot_message(response)
-                return (response, False, None, None, "informational")
+                # User declined or asked something else
+                logger.info("User declined or asked new question")
+                self._reset_conversation(conversation_key)
+                # Process as new query
+                response, should_generate, query_type = self._process_new_query(user_message, conversation_key)
+                return (response, should_generate, None, None, query_type)
 
-        # FAST PATH: Check for simple rejections
-        if self.smart_classifier.is_simple_rejection(user_message):
-            logger.info("Simple rejection detected")
-            response = "Хорошо, не буду генерировать таблицу. Чем ещё могу помочь?"
-            context.add_bot_message(response)
-            context.clear_data()  # Clear data but keep history
-            return (response, False, None, None, "informational")
+        # Process new query
+        response, should_generate, query_type = self._process_new_query(user_message, conversation_key)
+        return (response, should_generate, None, None, query_type)
 
-        # SMART CLASSIFICATION: Determine intent with context
-        intent = self.smart_classifier.classify_with_context(
-            user_message=user_message,
-            conversation_history=context.get_recent_history(),
-            has_pending_data=context.has_dataframe()
-        )
-
-        logger.info(f"Intent classified as: {intent}")
-
-        # Route to appropriate handler
-        if intent == "continuation":
-            return self._handle_continuation(context, user_message)
-
-        elif intent == "query_refinement":
-            return self._handle_query_refinement(context, user_message)
-
-        elif intent == "table_request":
-            return self._handle_table_request(context, user_message)
-
-        elif intent == "new_data_query":
-            return self._handle_new_data_query(context, user_message)
-
-        elif intent == "informational":
-            return self._handle_informational(context, user_message)
-
-        else:
-            # Fallback
-            response = "Извините, я не совсем понял ваш запрос. Попробуйте переформулировать? 🤔"
-            context.add_bot_message(response)
-            return (response, False, None, None, "unknown")
-
-    def _handle_continuation(
+    def _process_new_query(
         self,
-        context: ConversationContext,
-        user_message: str
-    ) -> Tuple[str, bool, Optional[Any], Optional[str], str]:
-        """
-        Handle follow-up question using data in memory.
-
-        Args:
-            context: Conversation context
-            user_message: User's follow-up question
+        user_message: str,
+        conversation_key: Tuple[str, str]
+    ) -> Tuple[str, bool, str]:
+        """Process new user query.
 
         Returns:
-            Response tuple
+            Tuple of (response, should_generate, query_type)
         """
-        logger.info("Handling continuation (follow-up question)")
+        # Classify query
+        query_type = self.classifier.classify(user_message)
+        logger.info(f"Query classified as: {query_type}")
 
-        if not context.has_dataframe():
-            logger.warning("Continuation requested but no data in memory")
-            response = "К сожалению, у меня нет данных для ответа на этот вопрос. Можете задать новый аналитический запрос?"
-            context.add_bot_message(response)
-            return (response, False, None, None, "continuation")
+        if query_type == "informational":
+            # Handle informational query
+            response = self.informational_agent.respond(user_message)
+            self._reset_conversation(conversation_key)
+            return (response, False, query_type)
 
-        try:
-            # Use continuation agent to answer
-            answer = self.continuation_agent.answer_followup(
-                user_question=user_message,
-                previous_dataframe=context.last_dataframe,
-                previous_sql=context.last_sql,
-                previous_analysis=context.last_analysis,
-                conversation_history=context.get_recent_history()
-            )
-
-            context.add_bot_message(answer)
-            logger.info(f"Generated continuation answer ({len(answer)} chars)")
-
-            return (answer, False, None, None, "continuation")
-
-        except Exception as e:
-            logger.error(f"Error in continuation handling: {e}")
-            response = "Извините, произошла ошибка при обработке вашего вопроса. Попробуйте задать новый запрос."
-            context.add_bot_message(response)
-            return (response, False, None, None, "continuation")
-
-    def _handle_query_refinement(
-        self,
-        context: ConversationContext,
-        user_message: str
-    ) -> Tuple[str, bool, Optional[Any], Optional[str], str]:
-        """
-        Handle query refinement - modify existing SQL based on follow-up.
-
-        Args:
-            context: Conversation context
-            user_message: User's refinement request
-
-        Returns:
-            Response tuple
-        """
-        logger.info("Handling query refinement (SQL modification)")
-
-        if not context.has_dataframe():
-            logger.warning("Query refinement requested but no data in memory")
-            response = "У меня нет данных для уточнения запроса. Можете задать новый аналитический запрос?"
-            context.add_bot_message(response)
-            return (response, False, None, None, "query_refinement")
-
-        try:
-            # Use query refinement agent to modify SQL and re-execute
-            analysis, new_dataframe, refined_sql = self.query_refinement_agent.refine_query(
-                original_sql=context.last_sql,
-                original_user_query=context.last_user_query,
-                refinement_request=user_message,
-                sql_generator=self.sql_generator,
-                db_manager=self.db_manager
-            )
-
-            # Update context with NEW refined data
-            context.save_data(
-                dataframe=new_dataframe,
-                sql_query=refined_sql,
-                analysis=analysis
-            )
-
-            context.add_bot_message(analysis)
-            logger.info(f"Query refined: {len(new_dataframe)} rows, {len(new_dataframe.columns)} columns")
-
-            return (analysis, False, None, None, "query_refinement")
-
-        except Exception as e:
-            logger.error(f"Error in query refinement: {e}")
-            response = f"Извините, произошла ошибка при уточнении запроса. Попробуйте переформулировать или задать новый запрос."
-            context.add_bot_message(response)
-            return (response, False, None, None, "query_refinement")
-
-    def _handle_table_request(
-        self,
-        context: ConversationContext,
-        user_message: str
-    ) -> Tuple[str, bool, Optional[Any], Optional[str], str]:
-        """
-        Handle request to generate Excel table.
-
-        Args:
-            context: Conversation context
-            user_message: User's message
-
-        Returns:
-            Response tuple with table generation flag
-        """
-        logger.info("Handling table generation request")
-
-        if not context.has_dataframe():
-            response = "У меня нет данных для генерации таблицы. Задайте сначала аналитический запрос."
-            context.add_bot_message(response)
-            return (response, False, None, None, "table_request")
-
-        # Prepare data context for Excel generation
-        data_context = {
-            "dataframe": context.last_dataframe,
-            "sql_query": context.last_sql
-        }
-
-        response = "Отлично! Генерирую таблицу для вас... ⏳"
-        context.add_bot_message(response)
-
-        # Don't clear data immediately - might ask follow-ups about the table
-        logger.info(f"Returning data for table generation ({len(context.last_dataframe)} rows)")
-
-        return (
-            response,
-            True,  # Should generate table
-            data_context,
-            context.last_user_query,
-            "table_request"
-        )
-
-    def _handle_new_data_query(
-        self,
-        context: ConversationContext,
-        user_message: str
-    ) -> Tuple[str, bool, Optional[Any], Optional[str], str]:
-        """
-        Handle new data extraction query.
-
-        Args:
-            context: Conversation context
-            user_message: User's query
-
-        Returns:
-            Response tuple
-        """
-        logger.info("Handling new data extraction query")
-
-        try:
-            # Use analytical agent (existing functionality)
+        elif query_type == "data_extraction":
+            # Handle data extraction query - now returns analysis, dataframe, and sql
             analysis, dataframe, sql_query = self.analytical_agent.analyze(user_message)
 
-            # Save data to context
-            context.save_data(
-                dataframe=dataframe,
-                sql_query=sql_query,
-                analysis=analysis
-            )
+            # Update conversation state - waiting for confirmation
+            # Store dataframe and sql_query so we don't need to regenerate
+            self.conversations[conversation_key] = {
+                "state": ConversationState.WAITING_FOR_CONFIRMATION,
+                "last_query": user_message,
+                "dataframe": dataframe,
+                "sql_query": sql_query,
+                "query_type": query_type
+            }
 
-            context.add_bot_message(analysis)
-            logger.info(f"Analysis complete: {len(dataframe)} rows, {len(dataframe.columns)} columns")
+            return (analysis, False, query_type)
 
-            return (analysis, False, None, None, "data_extraction")
+        # Fallback
+        return (
+            "Извините, я не совсем понял ваш запрос. Попробуйте переформулировать? 🤔",
+            False,
+            "unknown"
+        )
 
-        except Exception as e:
-            logger.error(f"Error in data extraction: {e}")
-            response = f"Извините, произошла ошибка при обработке запроса: {str(e)}"
-            context.add_bot_message(response)
-            return (response, False, None, None, "data_extraction")
-
-    def _handle_informational(
-        self,
-        context: ConversationContext,
-        user_message: str
-    ) -> Tuple[str, bool, Optional[Any], Optional[str], str]:
+    def _is_confirmation(self, message: str) -> bool:
         """
-        Handle informational query about bot functionality.
+        Check if message is a confirmation for table generation.
 
         Args:
-            context: Conversation context
-            user_message: User's question
+            message: User's message
 
         Returns:
-            Response tuple
+            True if message is confirmation, False otherwise
         """
-        logger.info("Handling informational query")
+        message_lower = message.lower().strip()
 
-        try:
-            # Use informational agent (existing functionality)
-            response = self.informational_agent.respond(user_message)
-            context.add_bot_message(response)
-            return (response, False, None, None, "informational")
-
-        except Exception as e:
-            logger.error(f"Error in informational handling: {e}")
-            response = "Извините, произошла ошибка. Попробуйте ещё раз."
-            context.add_bot_message(response)
-            return (response, False, None, None, "informational")
-
-    def cleanup_expired_contexts(self):
-        """
-        Clean up expired conversation contexts.
-        Should be called periodically (e.g., every hour).
-        """
-        expired_keys = [
-            key for key, context in self.conversations.items()
-            if context.is_expired()
+        # Positive confirmations
+        positive_keywords = [
+            "да", "yes", "конечно", "давай", "давайте", "ок",
+            "хорошо", "согласен", "подтверждаю", "генерируй",
+            "сгенерируй", "выгрузи", "сделай", "вперед", "го",
+            "ага", "угу", "ага давай", "ага конечно", "ага да",
+            "+", "✓", "👍", "okay", "ok"
         ]
 
-        for key in expired_keys:
-            logger.info(f"Cleaning up expired context for {key}")
-            del self.conversations[key]
+        # Negative keywords
+        negative_keywords = [
+            "нет", "no", "не надо", "не нужно", "отмена", "стоп"
+        ]
 
-        if expired_keys:
-            logger.info(f"Cleaned up {len(expired_keys)} expired contexts")
+        # Check for negative first
+        for keyword in negative_keywords:
+            if keyword in message_lower:
+                return False
 
-    def get_context_summary(self, user_id: str, channel_id: str) -> Optional[Dict]:
-        """
-        Get summary of conversation context for debugging.
+        # Check for positive
+        for keyword in positive_keywords:
+            if keyword in message_lower:
+                return True
 
-        Args:
-            user_id: Slack user ID
-            channel_id: Slack channel ID
+        # If message is very short and positive-like
+        if len(message_lower) <= 5 and message_lower in ["да", "yes", "ок", "ok", "+", "ага", "угу"]:
+            return True
 
-        Returns:
-            Context summary dict or None
-        """
-        context = self.conversations.get((user_id, channel_id))
-        return context.get_summary() if context else None
+        return False
 
-    # Legacy method for backward compatibility
+    def _reset_conversation(self, conversation_key: Tuple[str, str]):
+        """Reset conversation state to initial."""
+        self.conversations[conversation_key] = {
+            "state": ConversationState.INITIAL,
+            "last_query": None
+        }
+
     def get_last_query(self, user_id: str, channel_id: str) -> Optional[str]:
         """
-        Get the last query from user (backward compatibility).
+        Get the last query from user for table generation.
 
         Args:
             user_id: Slack user ID
@@ -409,5 +231,10 @@ class AgentOrchestrator:
         Returns:
             Last query text or None
         """
-        context = self.conversations.get((user_id, channel_id))
-        return context.last_user_query if context else None
+        conversation_key = (user_id, channel_id)
+        conversation = self.conversations.get(conversation_key)
+
+        if conversation:
+            return conversation.get("last_query")
+
+        return None
