@@ -15,13 +15,36 @@ class QueryRefinementAgent:
     Handles query refinement - modifying existing SQL based on follow-up requests.
 
     Example:
-    Original query: "Сколько атлетов вступило в кланы в сентябре?"
-    SQL: SELECT COUNT(*) FROM userclantransaction WHERE month = 'September'
+    Original query: "Кто чаще всех сходил на треньку в прошлом году?"
+    SQL:SELECT 
+            "user",
+            COUNT(*) AS checkin_count
+        FROM 
+            olap_schema.usercheckin
+        WHERE 
+            EXTRACT(YEAR FROM created_at) = 2024
+        GROUP BY 
+            "user"
+        ORDER BY 
+            checkin_count DESC
+        LIMIT 1;
 
-    Follow-up: "А из них сколько имеют ХП?"
-    Refined SQL: SELECT COUNT(*) FROM userclantransaction t
-                 JOIN subscriptions s ON t.user = s.user
-                 WHERE month = 'September' AND s.has_heropass = true
+    Follow-up: "А как зовут этого юзера?"
+    Refined SQL: 
+        SELECT 
+            uc."user",
+            fistname,
+            lastname,
+            COUNT(*) AS checkin_count
+        FROM 
+            olap_schema.usercheckin
+        WHERE 
+            EXTRACT(YEAR FROM created_at) = 2024
+        GROUP BY 
+            1,2,3
+        ORDER BY 
+            checkin_count DESC
+        LIMIT 1e
     """
 
     def __init__(self, api_key: str, schema_docs: dict, model: str = "gpt-4o"):
