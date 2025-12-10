@@ -98,29 +98,40 @@ class QueryRefinementAgent:
 
 Original SQL:
 ```sql
-SELECT COUNT(*) as count,
-       EXTRACT(MONTH FROM created_at) as month
-FROM userclantransaction
-WHERE created_at >= '2025-09-01' AND created_at < '2025-12-01'
-GROUP BY month
+    SELECT 
+        "user",
+        COUNT(*) AS checkin_count
+    FROM 
+        olap_schema.usercheckin
+    WHERE 
+        EXTRACT(YEAR FROM created_at) = 2024
+    GROUP BY 
+        "user"
+    ORDER BY 
+        checkin_count DESC
+    LIMIT 1
 ```
 
 User refinement: "из них сколько имеют ХП?"
 
 Refined SQL:
-```sql
-SELECT COUNT(DISTINCT uct.user) as count,
-       EXTRACT(MONTH FROM uct.created_at) as month
-FROM userclantransaction uct
-JOIN userheropass uhp ON uct.user = uhp.user
-WHERE uct.created_at >= '2025-09-01'
-  AND uct.created_at < '2025-12-01'
-  AND uhp.status = 'active'
-  AND (uhp.is_dropped IS NULL OR uhp.is_dropped = false)
-GROUP BY month
+```SELECT 
+        uc."user",
+        fistname,
+        lastname,
+        COUNT(*) AS checkin_count
+    FROM 
+        olap_schema.usercheckin
+    WHERE 
+        EXTRACT(YEAR FROM created_at) = 2024
+    GROUP BY 
+        1,2,3
+    ORDER BY 
+        checkin_count DESC
+    LIMIT 1e
 ```
 
-Explanation: "Добавил JOIN с таблицей userheropass и фильтр на активную подписку."
+Explanation: "Добавил firstname и lastname."
 
 ---
 
