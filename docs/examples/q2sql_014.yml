@@ -1,0 +1,45 @@
+id: q2sql_013
+question_ru: "выгрузи мне список пользователей кто не состоит в кланах и имеет полугодовой и годовой hero's pass в филиале promenade и сходил на как минимум 5 тренировок с 1 ноября по 15 декабря" 
+intents: ["Атлеты которые не состоят в кланах и имеют полугодовой и годовой hero's pass в филиале promenade и сходили на как минимум 5 тренировок с 1 ноября по 15 декабря"]
+
+
+sql:
+  dialect: postgres
+  statement: |
+    WITH users_with_clans AS (
+      SELECT DISTINCT unnest(users) AS "user"
+      FROM olap_schema.clan
+    ),
+    users_with_hero_pass AS (
+      SELECT DISTINCT "user", firstname, lastname, email, phonenumber
+      FROM olap_schema.userheropass
+      WHERE hp_name IN ('Полугодовой Hero''s Pass', 'Годовой Hero''s Pass')
+        AND club_name = 'HJ Promenade'
+        AND status = 'active'
+    ),
+    users_with_checkins AS (
+      SELECT "user"
+      FROM olap_schema.usercheckin
+      WHERE created_at >= '2025-11-01'
+        AND created_at < '2025-12-16'
+      GROUP BY "user"
+      HAVING COUNT(id) >= 5
+    )
+    SELECT DISTINCT u."user", u.firstname, u.lastname, u.email, u.phonenumber
+    FROM users_with_hero_pass u
+    LEFT JOIN users_with_clans c ON u."user" = c."user"
+    JOIN users_with_checkins ch ON u."user" = ch."user"
+    WHERE c."user" IS NULL
+        
+
+expected_schema:  
+  - name: user
+    type: varchar(24)
+  - name: firstname
+    type: text
+  - name: lastname
+    type: text
+  - name: email
+    type: varchar(255)
+  - name: phonenumber
+    type: varchar(24)
