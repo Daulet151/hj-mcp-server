@@ -65,7 +65,7 @@ program_name_mappings:
   
   # Athlete серия
   - canonical: "Athlete I"
-    synonyms: ["Атлет 1", "Athlete 1", "атлет один", "атлет 1"]
+    synonyms: ["Атлет 1", "Athlete 1", "атлет один"]
     
   - canonical: "Athlete II"
     synonyms: ["Атлет 2", "Athlete 2", "атлет два"]
