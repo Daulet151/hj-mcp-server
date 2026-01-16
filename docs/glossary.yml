@@ -33,7 +33,7 @@ business_terms:
 program_name_mappings:
   # Build серия
   - canonical: "Build I"
-    synonyms: ["Билд 1", "Берн 1", "Build 1", "билд один", "build первый"]
+    synonyms: ["Билд 1", "Build 1", "билд один", "build первый"]
     
   - canonical: "Build II"
     synonyms: ["Билд 2", "Build 2", "билд два", "build второй"]
