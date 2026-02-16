@@ -1,4 +1,4 @@
-table: raw.user
+table: olap_schema.user
 description: "Основная таблица пользователей системы (атлеты, клиенты)"
 grain: "id (один пользователь = одна запись)"
 freshness_sla_hours: 0  # Обновляется в реальном времени
