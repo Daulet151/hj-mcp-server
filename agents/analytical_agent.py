@@ -107,12 +107,13 @@ class AnalyticalAgent:
 
         return "\n".join(context_parts)
 
-    def analyze(self, user_query: str) -> Tuple[str, Optional[pd.DataFrame], Optional[str]]:
+    def analyze(self, user_query: str, conversation_context: dict = None) -> Tuple[str, Optional[pd.DataFrame], Optional[str]]:
         """
         Analyze user's data extraction query by executing SQL and analyzing results.
 
         Args:
             user_query: User's data extraction request
+            conversation_context: Optional dict with previous conversation context for follow-up queries
 
         Returns:
             Tuple of (analysis_text, dataframe, sql_query)
@@ -123,9 +124,9 @@ class AnalyticalAgent:
         try:
             logger.info(f"Analyzing query with real data: {user_query[:100]}")
 
-            # Step 1: Generate SQL query
+            # Step 1: Generate SQL query (with conversation context for follow-ups)
             logger.info("Generating SQL query...")
-            sql_query = self.sql_generator.generate_query(user_query)
+            sql_query = self.sql_generator.generate_query(user_query, conversation_context)
             logger.info(f"Generated SQL: {sql_query[:100]}...")
 
             # Step 2: Execute query

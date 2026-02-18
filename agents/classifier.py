@@ -8,7 +8,7 @@ from utils.logger import setup_logger
 
 logger = setup_logger(__name__, "INFO")
 
-QueryType = Literal["informational", "data_extraction"]
+QueryType = Literal["informational", "data_extraction", "follow_up"]
 
 
 class QueryClassifier:
@@ -54,26 +54,53 @@ class QueryClassifier:
    - "Покажи юзеров у кого заканчивается ХП абонемент в ближайшие 7 дней"
    - "Список участников марафона"
 
-ВАЖНО: Отвечай ТОЛЬКО одним словом: "informational" или "data_extraction" без каких-либо объяснений."""
+3. **follow_up** - уточнение или продолжение предыдущего запроса:
+   - Ссылки на предыдущий результат ("а теперь", "ещё", "добавь", "разбей")
+   - Модификация предыдущего запроса ("только по Алматы", "за прошлый месяц")
+   - Короткие уточнения без полного контекста ("по клубам", "с email")
 
-    def classify(self, user_query: str) -> QueryType:
+   Примеры:
+   - "а теперь разбей по клубам"
+   - "добавь колонку с email"
+   - "за прошлый месяц"
+   - "только по Алматы"
+   - "а сколько из них активных?"
+
+   ВАЖНО: follow_up возможен ТОЛЬКО если предоставлен контекст предыдущего разговора.
+   Без контекста такие запросы классифицируй как data_extraction.
+
+ВАЖНО: Отвечай ТОЛЬКО одним словом: "informational", "data_extraction" или "follow_up" без каких-либо объяснений."""
+
+    def classify(self, user_query: str, conversation_context: dict = None) -> QueryType:
         """
-        Classify user query.
+        Classify user query, optionally using conversation context.
 
         Args:
             user_query: User's question
+            conversation_context: Optional dict with previous conversation context
+                - previous_question: Last user question
+                - previous_sql: Last SQL query
+                - history: List of recent interactions
 
         Returns:
-            Query type: 'informational' or 'data_extraction'
+            Query type: 'informational', 'data_extraction', or 'follow_up'
         """
         try:
             logger.info(f"Classifying query: {user_query[:100]}")
+
+            # Build input with context if available
+            classify_input = user_query
+            if conversation_context and conversation_context.get("previous_question"):
+                classify_input = (
+                    f"Предыдущий запрос пользователя: {conversation_context['previous_question']}\n"
+                    f"Текущий запрос: {user_query}"
+                )
 
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": self.system_prompt},
-                    {"role": "user", "content": user_query}
+                    {"role": "user", "content": classify_input}
                 ],
                 temperature=0,
                 max_tokens=10
@@ -82,8 +109,14 @@ class QueryClassifier:
             classification = response.choices[0].message.content.strip().lower()
 
             # Validate response
-            if classification not in ["informational", "data_extraction"]:
+            valid_types = ["informational", "data_extraction", "follow_up"]
+            if classification not in valid_types:
                 logger.warning(f"Unexpected classification: {classification}, defaulting to data_extraction")
+                return "data_extraction"
+
+            # follow_up without context should be treated as data_extraction
+            if classification == "follow_up" and not conversation_context:
+                logger.info("follow_up without context, treating as data_extraction")
                 return "data_extraction"
 
             logger.info(f"Query classified as: {classification}")
@@ -91,5 +124,4 @@ class QueryClassifier:
 
         except Exception as e:
             logger.error(f"Classification error: {e}")
-            # Default to data_extraction on error
             return "data_extraction"

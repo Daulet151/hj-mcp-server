@@ -34,12 +34,16 @@ class SQLGenerator:
         self.system_prompt = self._generate_system_prompt(schema_docs)
         logger.info("System prompt generated with %d characters", len(self.system_prompt))
 
-    def generate_query(self, user_prompt: str) -> str:
+    def generate_query(self, user_prompt: str, conversation_context: dict = None) -> str:
         """
         Generate SQL query from natural language prompt.
 
         Args:
             user_prompt: Natural language question
+            conversation_context: Optional dict with previous conversation context
+                - previous_sql: Last SQL query from conversation
+                - previous_question: Last user question
+                - history: List of recent interaction dicts
 
         Returns:
             Generated SQL query string
@@ -55,8 +59,14 @@ class SQLGenerator:
         try:
             messages = [
                 {"role": "system", "content": self.system_prompt},
-                {"role": "user", "content": user_prompt}
             ]
+
+            if conversation_context:
+                context_msg = self._build_context_message(conversation_context)
+                messages.append({"role": "system", "content": context_msg})
+                logger.info("Added conversation context to SQL generation")
+
+            messages.append({"role": "user", "content": user_prompt})
 
             response = self.client.chat.completions.create(
                 model=self.model,
@@ -77,6 +87,39 @@ class SQLGenerator:
         except Exception as e:
             logger.error("Failed to generate SQL: %s", str(e))
             raise
+
+    def _build_context_message(self, ctx: dict) -> str:
+        """
+        Build conversation context message for follow-up SQL generation.
+
+        Args:
+            ctx: Dict with previous_sql, previous_question, history
+
+        Returns:
+            Context string to include in LLM messages
+        """
+        parts = ["КОНТЕКСТ ПРЕДЫДУЩЕГО РАЗГОВОРА:"]
+
+        if ctx.get("previous_question"):
+            parts.append(f"Предыдущий вопрос пользователя: {ctx['previous_question']}")
+
+        if ctx.get("previous_sql"):
+            parts.append(f"Предыдущий SQL запрос:\n{ctx['previous_sql']}")
+
+        if ctx.get("history"):
+            parts.append("\nПоследние сообщения:")
+            for msg in ctx["history"][-3:]:
+                parts.append(f"  Пользователь: {msg['user_message']}")
+                if msg.get("sql_query"):
+                    parts.append(f"  SQL: {msg['sql_query'][:300]}")
+
+        parts.append(
+            "\nЕсли текущий запрос является уточнением или продолжением предыдущего, "
+            "модифицируй предыдущий SQL соответственно. "
+            "Если это новый независимый запрос, игнорируй контекст и генерируй SQL с нуля."
+        )
+
+        return "\n".join(parts)
 
     def _extract_sql_from_response(self, response: str) -> str:
         """

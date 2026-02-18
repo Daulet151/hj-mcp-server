@@ -180,6 +180,121 @@ class DatabaseManager:
         except Exception as e:
             logger.error("Failed to log user to analytics: %s", str(e))
 
+    def save_conversation_state(self, user_id: str, channel_id: str,
+                                state: str, last_query: str = None,
+                                last_sql_query: str = None, query_type: str = None):
+        """
+        Save or update conversation state for persistence across restarts.
+
+        Args:
+            user_id: Slack user ID
+            channel_id: Slack channel ID
+            state: Current conversation state (initial, waiting_for_confirmation, etc.)
+            last_query: Last user query text
+            last_sql_query: Last generated SQL query
+            query_type: Query type (informational, data_extraction)
+        """
+        sql = """
+            INSERT INTO analytics.bot_conversation_state
+                (slack_user_id, channel_id, state, last_query, last_sql_query, last_query_type, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            ON CONFLICT (slack_user_id, channel_id)
+            DO UPDATE SET
+                state = EXCLUDED.state,
+                last_query = EXCLUDED.last_query,
+                last_sql_query = EXCLUDED.last_sql_query,
+                last_query_type = EXCLUDED.last_query_type,
+                updated_at = NOW()
+        """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (user_id, channel_id, state, last_query, last_sql_query, query_type))
+                    conn.commit()
+                    logger.debug("Conversation state saved: user=%s, state=%s", user_id, state)
+        except Exception as e:
+            logger.error("Failed to save conversation state: %s", str(e))
+
+    def load_conversation_state(self, user_id: str, channel_id: str) -> dict:
+        """
+        Load conversation state from DB if not expired (30 min timeout).
+
+        Args:
+            user_id: Slack user ID
+            channel_id: Slack channel ID
+
+        Returns:
+            Dict with state, last_query, last_sql_query, last_query_type or None if expired/missing
+        """
+        sql = """
+            SELECT state, last_query, last_sql_query, last_query_type, updated_at
+            FROM analytics.bot_conversation_state
+            WHERE slack_user_id = %s AND channel_id = %s
+              AND updated_at > NOW() - INTERVAL '30 minutes'
+        """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (user_id, channel_id))
+                    row = cur.fetchone()
+                    if row:
+                        return {
+                            "state": row[0],
+                            "last_query": row[1],
+                            "last_sql_query": row[2],
+                            "last_query_type": row[3],
+                            "updated_at": row[4]
+                        }
+                    return None
+        except Exception as e:
+            logger.error("Failed to load conversation state: %s", str(e))
+            return None
+
+    def get_recent_interactions(self, user_id: str, channel_id: str,
+                                limit: int = 5, minutes: int = 30) -> list:
+        """
+        Get recent conversation interactions for multi-turn context.
+
+        Args:
+            user_id: Slack user ID
+            channel_id: Slack channel ID
+            limit: Max number of interactions to return
+            minutes: Time window in minutes
+
+        Returns:
+            List of dicts with user_message, bot_response, sql_query, query_type, created_at
+            Ordered oldest-first for chronological context.
+        """
+        sql = """
+            SELECT user_message, bot_response, sql_query, query_type, created_at
+            FROM analytics.bot_interactions
+            WHERE slack_user_id = %s AND channel_id = %s
+              AND created_at > NOW() - INTERVAL '%s minutes'
+            ORDER BY created_at DESC
+            LIMIT %s
+        """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (user_id, channel_id, minutes, limit))
+                    rows = cur.fetchall()
+                    results = [
+                        {
+                            "user_message": row[0],
+                            "bot_response": row[1],
+                            "sql_query": row[2],
+                            "query_type": row[3],
+                            "created_at": row[4]
+                        }
+                        for row in rows
+                    ]
+                    # Reverse to get oldest-first (chronological order)
+                    results.reverse()
+                    return results
+        except Exception as e:
+            logger.error("Failed to get recent interactions: %s", str(e))
+            return []
+
     def log_bot_interaction(self, interaction_data: dict):
         """
         Log bot interaction to analytics.bot_interactions.

@@ -49,9 +49,10 @@ class AgentOrchestrator:
             db_manager,
             model
         )
+        self.db_manager = db_manager
 
-        # Conversation state management
-        # Key: (user_id, channel_id), Value: {state, last_query}
+        # Conversation state management (in-memory cache, backed by PostgreSQL)
+        # Key: (user_id, channel_id), Value: {state, last_query, ...}
         self.conversations: Dict[Tuple[str, str], Dict[str, Any]] = {}
 
     def process_message(
@@ -77,13 +78,7 @@ class AgentOrchestrator:
             - query_type: Type of query (informational, data_extraction, or None)
         """
         conversation_key = (user_id, channel_id)
-        conversation = self.conversations.get(conversation_key, {
-            "state": ConversationState.INITIAL,
-            "last_query": None,
-            "dataframe": None,
-            "sql_query": None,
-            "query_type": None
-        })
+        conversation = self._get_conversation(user_id, channel_id)
 
         current_state = conversation["state"]
         logger.info(f"Processing message in state: {current_state.value}")
@@ -133,13 +128,18 @@ class AgentOrchestrator:
         user_message: str,
         conversation_key: Tuple[str, str]
     ) -> Tuple[str, bool, str]:
-        """Process new user query.
+        """Process new user query with conversation context.
 
         Returns:
             Tuple of (response, should_generate, query_type)
         """
-        # Classify query
-        query_type = self.classifier.classify(user_message)
+        user_id, channel_id = conversation_key
+
+        # Build conversation context from recent interactions
+        conversation_context = self._build_conversation_context(user_id, channel_id)
+
+        # Classify query with context
+        query_type = self.classifier.classify(user_message, conversation_context)
         logger.info(f"Query classified as: {query_type}")
 
         if query_type == "informational":
@@ -148,9 +148,11 @@ class AgentOrchestrator:
             self._reset_conversation(conversation_key)
             return (response, False, query_type)
 
-        elif query_type == "data_extraction":
-            # Handle data extraction query - now returns analysis, dataframe, and sql
-            analysis, dataframe, sql_query = self.analytical_agent.analyze(user_message)
+        elif query_type in ("data_extraction", "follow_up"):
+            # Handle data extraction or follow-up query with context
+            analysis, dataframe, sql_query = self.analytical_agent.analyze(
+                user_message, conversation_context
+            )
 
             # Update conversation state - waiting for confirmation
             # Store dataframe and sql_query so we don't need to regenerate
@@ -159,10 +161,20 @@ class AgentOrchestrator:
                 "last_query": user_message,
                 "dataframe": dataframe,
                 "sql_query": sql_query,
-                "query_type": query_type
+                "query_type": "data_extraction"  # normalize follow_up to data_extraction
             }
 
-            return (analysis, False, query_type)
+            # Persist state to survive restarts
+            self.db_manager.save_conversation_state(
+                user_id=user_id,
+                channel_id=channel_id,
+                state="waiting_for_confirmation",
+                last_query=user_message,
+                last_sql_query=sql_query,
+                query_type="data_extraction"
+            )
+
+            return (analysis, False, "data_extraction")
 
         # Fallback
         return (
@@ -214,11 +226,82 @@ class AgentOrchestrator:
         return False
 
     def _reset_conversation(self, conversation_key: Tuple[str, str]):
-        """Reset conversation state to initial."""
+        """Reset conversation state to initial (in-memory and DB)."""
         self.conversations[conversation_key] = {
             "state": ConversationState.INITIAL,
             "last_query": None
         }
+        user_id, channel_id = conversation_key
+        self.db_manager.save_conversation_state(
+            user_id=user_id,
+            channel_id=channel_id,
+            state="initial"
+        )
+
+    def _get_conversation(self, user_id: str, channel_id: str) -> Dict[str, Any]:
+        """
+        Get conversation state, loading from DB if not in memory.
+
+        Args:
+            user_id: Slack user ID
+            channel_id: Slack channel ID
+
+        Returns:
+            Conversation state dict
+        """
+        key = (user_id, channel_id)
+        if key not in self.conversations:
+            # Try loading from database
+            persisted = self.db_manager.load_conversation_state(user_id, channel_id)
+            if persisted and persisted.get("state") != "initial":
+                self.conversations[key] = {
+                    "state": ConversationState(persisted["state"]),
+                    "last_query": persisted.get("last_query"),
+                    "dataframe": None,  # Cannot persist DataFrames; user re-asks if restart happened
+                    "sql_query": persisted.get("last_sql_query"),
+                    "query_type": persisted.get("last_query_type"),
+                }
+                logger.info(f"Loaded persisted conversation state: {persisted['state']}")
+            else:
+                self.conversations[key] = {
+                    "state": ConversationState.INITIAL,
+                    "last_query": None,
+                    "dataframe": None,
+                    "sql_query": None,
+                    "query_type": None
+                }
+        return self.conversations[key]
+
+    def _build_conversation_context(self, user_id: str, channel_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Build conversation context from recent interactions for multi-turn queries.
+
+        Args:
+            user_id: Slack user ID
+            channel_id: Slack channel ID
+
+        Returns:
+            Dict with history, previous_question, previous_sql or None if no recent history
+        """
+        recent = self.db_manager.get_recent_interactions(user_id, channel_id, limit=5, minutes=30)
+        if not recent:
+            return None
+
+        # Find the last interaction that had a SQL query
+        last_data_interaction = None
+        for interaction in reversed(recent):
+            if interaction.get("sql_query"):
+                last_data_interaction = interaction
+                break
+
+        context = {
+            "history": recent,
+            "previous_question": recent[-1]["user_message"] if recent else None,
+            "previous_sql": last_data_interaction["sql_query"] if last_data_interaction else None,
+        }
+
+        logger.info(f"Built conversation context: {len(recent)} recent interactions, has_previous_sql={context['previous_sql'] is not None}")
+        return context
 
     def get_last_query(self, user_id: str, channel_id: str) -> Optional[str]:
         """
