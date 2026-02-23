@@ -24,6 +24,7 @@ class SQLGenerator:
         self.model = model
         self.system_prompt = ""
         self.db_manager = None  # Set after init if caching needed
+        self._live_tables = {}  # schema -> [table, ...] from DB
 
     def set_schema(self, schema_docs: Dict[str, Any]):
         """
@@ -34,6 +35,34 @@ class SQLGenerator:
         """
         self.system_prompt = self._generate_system_prompt(schema_docs)
         logger.info("System prompt generated with %d characters", len(self.system_prompt))
+
+    def load_live_tables(self):
+        """
+        Fetch all tables from all schemas via db_manager and append to system prompt.
+        Must be called after set_schema() and after db_manager is set.
+        """
+        if not self.db_manager:
+            logger.warning("db_manager not set — skipping live table load")
+            return
+        tables = self.db_manager.get_all_schemas_tables()
+        if not tables:
+            logger.warning("No live tables fetched from DB")
+            return
+        self._live_tables = tables
+
+        # Append live table section to system prompt
+        section = "\n\n=== ВСЕ ДОСТУПНЫЕ ТАБЛИЦЫ В БД (из information_schema) ===\n"
+        section += "Используй эти таблицы для поиска данных. Если olap_schema не даёт результат, пробуй raw, stage, ods_core.\n\n"
+        for schema_name in ("olap_schema", "raw", "stage", "ods_core"):
+            if schema_name in tables:
+                tlist = ", ".join(tables[schema_name])
+                section += f"Схема '{schema_name}' ({len(tables[schema_name])} таблиц):\n{tlist}\n\n"
+
+        self.system_prompt += section
+        logger.info(
+            "Appended live tables to system prompt: %d schemas, total prompt length %d chars",
+            len(tables), len(self.system_prompt)
+        )
 
     def generate_query(self, user_prompt: str, conversation_context: dict = None) -> str:
         """
@@ -122,6 +151,17 @@ class SQLGenerator:
                 context_msg = self._build_context_message(conversation_context)
                 system_text += "\n\n" + context_msg
 
+            # Try to extract schema.table from the failed SQL and fetch real columns
+            real_columns_info = ""
+            if self.db_manager:
+                from_match = re.search(r'FROM\s+([\w]+)\.([\w]+)', failed_sql, re.IGNORECASE)
+                if from_match:
+                    schema_name, table_name = from_match.group(1), from_match.group(2)
+                    real_cols = self.db_manager.get_table_columns(schema_name, table_name)
+                    if real_cols:
+                        real_columns_info = f"\nРЕАЛЬНЫЕ КОЛОНКИ таблицы {schema_name}.{table_name}:\n{', '.join(real_cols)}\nИСПОЛЬЗУЙ ТОЛЬКО ЭТИ КОЛОНКИ!\n"
+                        logger.info("Fetched %d real columns for %s.%s", len(real_cols), schema_name, table_name)
+
             retry_prompt = f"""Запрос пользователя: {user_prompt}
 
 Предыдущий SQL запрос вернул ошибку:
@@ -130,7 +170,7 @@ SQL:
 
 Ошибка PostgreSQL:
 {error_message}
-
+{real_columns_info}
 Исправь SQL запрос, учитывая ошибку. Используй ТОЛЬКО реальные колонки из документации схемы.
 Если ошибка связана с несуществующей колонкой — удали её или замени правильной.
 Верни ТОЛЬКО исправленный SQL без объяснений."""
