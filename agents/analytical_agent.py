@@ -4,7 +4,7 @@ Analyzes data extraction queries using schema documentation from YML files
 Executes SQL and provides real data insights
 """
 from typing import Dict, Any, Optional, Tuple
-from openai import OpenAI
+from anthropic import Anthropic
 import pandas as pd
 from utils.logger import setup_logger
 
@@ -20,19 +20,19 @@ class AnalyticalAgent:
         schema_docs: Dict[str, Any],
         sql_generator,
         db_manager,
-        model: str = "gpt-4o"
+        model: str = "claude-sonnet-4-5-20250929"
     ):
         """
         Initialize analytical agent.
 
         Args:
-            api_key: OpenAI API key
+            api_key: Anthropic API key
             schema_docs: Schema documentation loaded from YML files
             sql_generator: SQLGenerator instance for query generation
             db_manager: DatabaseManager instance for query execution
             model: Model to use for analysis
         """
-        self.client = OpenAI(api_key=api_key)
+        self.client = Anthropic(api_key=api_key)
         self.model = model
         self.schema_docs = schema_docs
         self.sql_generator = sql_generator
@@ -50,7 +50,7 @@ class AnalyticalAgent:
 1. Начни с основного вывода (например: "Нашел X пользователей...")
 2. Дай 5-10 ключевых инсайтов (bullets)
 3. Если есть временные данные - покажи распределение
-4. ОБЯЗАТЕЛЬНО закончи вопросом: "Желаете чтобы я сгенерировал для вас таблицу с этими данными? 📊"
+4. Если данных много, упомяни что пользователь может попросить выгрузку в Excel (скажи "выгрузи в Excel" если нужен файл)
 
 **Стиль:**
 - Конкретные цифры, не общие фразы
@@ -73,7 +73,7 @@ class AnalyticalAgent:
 • 11 ноября - 8 пользователей
 • 12 ноября - 5 пользователей
 
-Желаете чтобы я сгенерировал для вас таблицу с этими данными? 📊"""
+Если нужна выгрузка — скажи "выгрузи в Excel" 📊"""
 
     def _build_schema_context(self) -> str:
         """Build schema context from YML documentation."""
@@ -147,12 +147,12 @@ class AnalyticalAgent:
             # Step 4: Prepare data summary for analysis
             data_summary = self._create_data_summary(df)
 
-            # Step 5: Analyze with OpenAI
+            # Step 5: Analyze with Claude
             logger.info("Analyzing data with AI...")
-            response = self.client.chat.completions.create(
+            response = self.client.messages.create(
                 model=self.model,
+                system=self.analysis_prompt,
                 messages=[
-                    {"role": "system", "content": self.analysis_prompt},
                     {"role": "user", "content": f"""Запрос пользователя: {user_query}
 
 Данные из базы:
@@ -164,13 +164,8 @@ class AnalyticalAgent:
                 max_tokens=1000
             )
 
-            analysis = response.choices[0].message.content.strip()
+            analysis = response.content[0].text.strip()
             logger.info("Analysis with real data generated successfully")
-
-            # Ensure the question is present
-            if "сгенерировал для вас таблицу" not in analysis.lower() and \
-               "сгенерирую таблицу" not in analysis.lower():
-                analysis += "\n\nЖелаете чтобы я сгенерировал для вас таблицу с этими данными? 📊"
 
             return (analysis, df, sql_query)
 
@@ -179,9 +174,7 @@ class AnalyticalAgent:
             return (
                 f"""Произошла ошибка при анализе данных: {str(e)} 😔
 
-Но я могу попробовать сгенерировать таблицу напрямую.
-
-Желаете чтобы я сгенерировал для вас таблицу с этими данными? 📊""",
+Попробуйте переформулировать запрос или уточнить критерии.""",
                 None,
                 None
             )

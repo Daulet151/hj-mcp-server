@@ -16,9 +16,9 @@ class Config:
     BASE_DIR = Path(__file__).parent
     DOCS_DIR = BASE_DIR / "docs"
 
-    # OpenAI Configuration
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o")
+    # Anthropic Configuration
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+    ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5-20250929")
 
     # Slack Configuration
     SLACK_BOT_TOKEN = os.getenv("SLACK_BOT_TOKEN")
@@ -44,7 +44,7 @@ class Config:
     def validate(cls):
         """Validate required configuration"""
         required = [
-            ("OPENAI_API_KEY", cls.OPENAI_API_KEY),
+            ("ANTHROPIC_API_KEY", cls.ANTHROPIC_API_KEY),
             ("DB_HOST", cls.DB_HOST),
             ("DB_USER", cls.DB_USER),
             ("DB_PASSWORD", cls.DB_PASSWORD),

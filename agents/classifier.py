@@ -3,7 +3,7 @@ Query Classifier Agent
 Classifies user queries into different types: informational or data extraction
 """
 from typing import Literal
-from openai import OpenAI
+from anthropic import Anthropic
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__, "INFO")
@@ -14,15 +14,15 @@ QueryType = Literal["informational", "data_extraction", "follow_up"]
 class QueryClassifier:
     """Classifies user queries to route them to appropriate agents."""
 
-    def __init__(self, api_key: str, model: str = "gpt-4o"):
+    def __init__(self, api_key: str, model: str = "claude-sonnet-4-5-20250929"):
         """
         Initialize classifier.
 
         Args:
-            api_key: OpenAI API key
+            api_key: Anthropic API key
             model: Model to use for classification
         """
-        self.client = OpenAI(api_key=api_key)
+        self.client = Anthropic(api_key=api_key)
         self.model = model
 
         self.system_prompt = """Ты классификатор запросов для Hero's Journey SQL Assistant.
@@ -96,17 +96,17 @@ class QueryClassifier:
                     f"Текущий запрос: {user_query}"
                 )
 
-            response = self.client.chat.completions.create(
+            response = self.client.messages.create(
                 model=self.model,
+                system=self.system_prompt,
                 messages=[
-                    {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": classify_input}
                 ],
                 temperature=0,
-                max_tokens=10
+                max_tokens=50
             )
 
-            classification = response.choices[0].message.content.strip().lower()
+            classification = response.content[0].text.strip().lower()
 
             # Validate response
             valid_types = ["informational", "data_extraction", "follow_up"]

@@ -3,7 +3,7 @@ SQL query generation using OpenAI and schema documentation.
 """
 import re
 from typing import Dict, Any
-from openai import OpenAI
+from anthropic import Anthropic
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -12,15 +12,15 @@ logger = setup_logger(__name__)
 class SQLGenerator:
     """Generates SQL queries from natural language using OpenAI."""
 
-    def __init__(self, api_key: str, model: str = "gpt-4o"):
+    def __init__(self, api_key: str, model: str = "claude-sonnet-4-5-20250929"):
         """
         Initialize SQL generator.
 
         Args:
-            api_key: OpenAI API key
-            model: OpenAI model to use
+            api_key: Anthropic API key
+            model: Anthropic model to use
         """
-        self.client = OpenAI(api_key=api_key)
+        self.client = Anthropic(api_key=api_key)
         self.model = model
         self.system_prompt = ""
 
@@ -57,24 +57,22 @@ class SQLGenerator:
         logger.info("Generating SQL for prompt: %s", user_prompt[:100])
 
         try:
-            messages = [
-                {"role": "system", "content": self.system_prompt},
-            ]
+            system_text = self.system_prompt
 
             if conversation_context:
                 context_msg = self._build_context_message(conversation_context)
-                messages.append({"role": "system", "content": context_msg})
+                system_text += "\n\n" + context_msg
                 logger.info("Added conversation context to SQL generation")
 
-            messages.append({"role": "user", "content": user_prompt})
-
-            response = self.client.chat.completions.create(
+            response = self.client.messages.create(
                 model=self.model,
-                messages=messages,
-                temperature=0.0
+                system=system_text,
+                messages=[{"role": "user", "content": user_prompt}],
+                temperature=0.0,
+                max_tokens=2000
             )
 
-            sql_output = response.choices[0].message.content.strip()
+            sql_output = response.content[0].text.strip()
 
             # Extract SQL from markdown code blocks if present
             sql_output = self._extract_sql_from_response(sql_output)

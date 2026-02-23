@@ -32,7 +32,7 @@ app = Flask(__name__)
 schema_loader = SchemaLoader(Config.DOCS_DIR)
 schema_docs = schema_loader.load_all()
 
-sql_generator = SQLGenerator(Config.OPENAI_API_KEY, Config.OPENAI_MODEL)
+sql_generator = SQLGenerator(Config.ANTHROPIC_API_KEY, Config.ANTHROPIC_MODEL)
 sql_generator.set_schema(schema_docs)
 
 db_manager = DatabaseManager(
@@ -48,11 +48,11 @@ excel_generator = ExcelGenerator()
 # Initialize multi-agent orchestrator
 # Pass sql_generator and db_manager to analytical agent for real data analysis
 orchestrator = AgentOrchestrator(
-    api_key=Config.OPENAI_API_KEY,
+    api_key=Config.ANTHROPIC_API_KEY,
     schema_docs=schema_docs,
     sql_generator=sql_generator,
     db_manager=db_manager,
-    model=Config.OPENAI_MODEL
+    model=Config.ANTHROPIC_MODEL
 )
 
 # Test database connection on startup

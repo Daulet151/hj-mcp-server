@@ -2,7 +2,7 @@
 Informational Agent
 Handles general questions about the bot functionality and Hero's Journey
 """
-from openai import OpenAI
+from anthropic import Anthropic
 from utils.logger import setup_logger
 
 logger = setup_logger(__name__, "INFO")
@@ -11,15 +11,15 @@ logger = setup_logger(__name__, "INFO")
 class InformationalAgent:
     """Answers informational questions and suggests query examples."""
 
-    def __init__(self, api_key: str, model: str = "gpt-4o"):
+    def __init__(self, api_key: str, model: str = "claude-sonnet-4-5-20250929"):
         """
         Initialize informational agent.
 
         Args:
-            api_key: OpenAI API key
+            api_key: Anthropic API key
             model: Model to use for responses
         """
-        self.client = OpenAI(api_key=api_key)
+        self.client = Anthropic(api_key=api_key)
         self.model = model
 
         self.system_prompt = """Ты AI Data Analyst для Hero's Journey - дружелюбный аналитический помощник в Slack.
@@ -118,17 +118,17 @@ Hero's Journey - это фитнес-программа с различными 
         try:
             logger.info(f"Generating informational response for: {user_query[:100]}")
 
-            response = self.client.chat.completions.create(
+            response = self.client.messages.create(
                 model=self.model,
+                system=self.system_prompt,
                 messages=[
-                    {"role": "system", "content": self.system_prompt},
                     {"role": "user", "content": user_query}
                 ],
                 temperature=0.7,
                 max_tokens=1000
             )
 
-            answer = response.choices[0].message.content.strip()
+            answer = response.content[0].text.strip()
             logger.info("Informational response generated successfully")
 
             return answer
