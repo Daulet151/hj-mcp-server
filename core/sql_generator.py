@@ -23,6 +23,7 @@ class SQLGenerator:
         self.client = Anthropic(api_key=api_key)
         self.model = model
         self.system_prompt = ""
+        self.db_manager = None  # Set after init if caching needed
 
     def set_schema(self, schema_docs: Dict[str, Any]):
         """
@@ -63,6 +64,17 @@ class SQLGenerator:
                 context_msg = self._build_context_message(conversation_context)
                 system_text += "\n\n" + context_msg
                 logger.info("Added conversation context to SQL generation")
+
+            # Inject cached successful queries as additional examples
+            if self.db_manager:
+                cached = self.db_manager.find_similar_cached_query(user_prompt)
+                if cached:
+                    cache_block = "\n=== ПОХОЖИЕ УСПЕШНЫЕ ЗАПРОСЫ ИЗ ИСТОРИИ ===\n"
+                    cache_block += "Эти запросы уже успешно выполнялись — используй их как образец:\n\n"
+                    for item in cached:
+                        cache_block += f"Вопрос: {item['user_message']}\nSQL:\n{item['sql_query']}\n\n"
+                    system_text += "\n\n" + cache_block
+                    logger.info("Injected %d cached queries into prompt", len(cached))
 
             response = self.client.messages.create(
                 model=self.model,

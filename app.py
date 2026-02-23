@@ -43,6 +43,9 @@ db_manager = DatabaseManager(
     port=Config.DB_PORT
 )
 
+# Enable SQL caching: inject db_manager so sql_generator can use past successful queries
+sql_generator.db_manager = db_manager
+
 excel_generator = ExcelGenerator()
 
 # Initialize multi-agent orchestrator

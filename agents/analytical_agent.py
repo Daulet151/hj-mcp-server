@@ -122,7 +122,7 @@ class AnalyticalAgent:
             - dataframe: Query results (for Excel generation later)
             - sql_query: Generated SQL query
         """
-        max_retries = 2
+        max_retries = 10
         last_error = None
         last_sql = None
 

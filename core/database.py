@@ -295,6 +295,53 @@ class DatabaseManager:
             logger.error("Failed to get recent interactions: %s", str(e))
             return []
 
+    def find_similar_cached_query(self, user_message: str, limit: int = 3) -> list:
+        """
+        Find similar successful queries from history to use as SQL examples.
+
+        Args:
+            user_message: Current user query
+            limit: Max number of similar queries to return
+
+        Returns:
+            List of dicts with user_message and sql_query from past successes
+        """
+        # Search for past interactions that had SQL and returned rows
+        sql = """
+            SELECT user_message, sql_query, rows_returned
+            FROM analytics.bot_interactions
+            WHERE sql_query IS NOT NULL
+              AND sql_executed = true
+              AND rows_returned > 0
+              AND error_message IS NULL
+            ORDER BY created_at DESC
+            LIMIT 100
+        """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql)
+                    rows = cur.fetchall()
+
+            if not rows:
+                return []
+
+            # Simple keyword matching — find rows where user_message overlaps with current query
+            query_words = set(user_message.lower().split())
+            scored = []
+            for row in rows:
+                past_words = set((row[0] or "").lower().split())
+                overlap = len(query_words & past_words)
+                if overlap >= 2:
+                    scored.append((overlap, {"user_message": row[0], "sql_query": row[1]}))
+
+            scored.sort(key=lambda x: x[0], reverse=True)
+            return [item for _, item in scored[:limit]]
+
+        except Exception as e:
+            logger.error("Failed to find cached queries: %s", str(e))
+            return []
+
     def log_bot_interaction(self, interaction_data: dict):
         """
         Log bot interaction to analytics.bot_interactions.
