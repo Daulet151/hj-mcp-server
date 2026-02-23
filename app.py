@@ -566,7 +566,58 @@ def slack_events():
         # Immediately respond to Slack
         return "OK", 200
 
+    # Handle emoji reactions (👍/👎) for query pattern feedback
+    if event_type == 'reaction_added':
+        reaction = event.get('reaction', '')
+        user_id = event.get('user', '')
+        item = event.get('item', {})
+
+        if reaction in ('+1', 'thumbsup', '-1', 'thumbsdown') and item.get('type') == 'message':
+            feedback = 'positive' if reaction in ('+1', 'thumbsup') else 'negative'
+            channel_id = item.get('channel')
+
+            thread = threading.Thread(
+                target=_handle_reaction_feedback,
+                args=(channel_id, feedback, user_id),
+                daemon=True
+            )
+            thread.start()
+
     return "OK", 200
+
+
+def _handle_reaction_feedback(channel_id: str, feedback: str, user_id: str):
+    """
+    Handle 👍/👎 reaction on bot message — update query pattern feedback.
+    Looks up the most recent pattern saved around the time of that message.
+    """
+    try:
+        # Find the most recent pattern created by this channel around message time
+        sql = """
+            SELECT id FROM analytics.bot_query_patterns
+            WHERE created_by = %s OR created_by = 'bot'
+            ORDER BY created_at DESC
+            LIMIT 1
+        """
+        with db_manager.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id,))
+                row = cur.fetchone()
+                if row:
+                    pattern_id = row[0]
+                    db_manager.mark_pattern_feedback(pattern_id, feedback)
+                    logger.info("User %s marked pattern %d as %s", user_id, pattern_id, feedback)
+
+                    emoji = "✅" if feedback == 'positive' else "❌"
+                    msg = f"{emoji} Спасибо за оценку! Запомню этот паттерн как {'успешный' if feedback == 'positive' else 'неудачный'}."
+                    requests.post(
+                        "https://slack.com/api/chat.postMessage",
+                        headers={"Authorization": f"Bearer {Config.SLACK_BOT_TOKEN}", "Content-Type": "application/json"},
+                        json={"channel": channel_id, "text": msg},
+                        timeout=10
+                    )
+    except Exception as e:
+        logger.error("Failed to handle reaction feedback: %s", str(e))
 
 
 @app.route('/health', methods=['GET'])

@@ -180,6 +180,16 @@ class AnalyticalAgent:
                 analysis = response.content[0].text.strip()
                 logger.info("Analysis with real data generated successfully")
 
+                # Save successful pattern to bot_query_patterns for future reuse
+                try:
+                    self.db_manager.save_query_pattern(
+                        question=user_query,
+                        sql_query=sql_query,
+                        row_count=len(df)
+                    )
+                except Exception as save_err:
+                    logger.warning("Could not save query pattern: %s", save_err)
+
                 return (analysis, df, sql_query)
 
             except Exception as e:

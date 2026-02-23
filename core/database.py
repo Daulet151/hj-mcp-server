@@ -297,7 +297,7 @@ class DatabaseManager:
 
     def find_similar_cached_query(self, user_message: str, limit: int = 3) -> list:
         """
-        Find similar successful queries from history to use as SQL examples.
+        Find similar successful queries using PostgreSQL full-text search on bot_query_patterns.
 
         Args:
             user_message: Current user query
@@ -306,41 +306,91 @@ class DatabaseManager:
         Returns:
             List of dicts with user_message and sql_query from past successes
         """
-        # Search for past interactions that had SQL and returned rows
         sql = """
-            SELECT user_message, sql_query, rows_returned
-            FROM analytics.bot_interactions
-            WHERE sql_query IS NOT NULL
-              AND sql_executed = true
-              AND rows_returned > 0
-              AND error_message IS NULL
-            ORDER BY created_at DESC
-            LIMIT 100
+            SELECT question_text, sql_query, row_count,
+                   ts_rank(to_tsvector('russian', question_text),
+                           plainto_tsquery('russian', %s)) AS rank
+            FROM analytics.bot_query_patterns
+            WHERE was_successful = true
+              AND user_feedback IS DISTINCT FROM 'negative'
+              AND to_tsvector('russian', question_text) @@ plainto_tsquery('russian', %s)
+            ORDER BY rank DESC
+            LIMIT %s
         """
         try:
             with self.get_connection() as conn:
                 with conn.cursor() as cur:
-                    cur.execute(sql)
+                    cur.execute(sql, (user_message, user_message, limit))
                     rows = cur.fetchall()
 
-            if not rows:
-                return []
-
-            # Simple keyword matching — find rows where user_message overlaps with current query
-            query_words = set(user_message.lower().split())
-            scored = []
-            for row in rows:
-                past_words = set((row[0] or "").lower().split())
-                overlap = len(query_words & past_words)
-                if overlap >= 2:
-                    scored.append((overlap, {"user_message": row[0], "sql_query": row[1]}))
-
-            scored.sort(key=lambda x: x[0], reverse=True)
-            return [item for _, item in scored[:limit]]
+            return [{"user_message": row[0], "sql_query": row[1]} for row in rows]
 
         except Exception as e:
             logger.error("Failed to find cached queries: %s", str(e))
             return []
+
+    def save_query_pattern(self, question: str, sql_query: str, row_count: int, created_by: str = "bot"):
+        """
+        Save a successful query pattern to bot_query_patterns.
+
+        Args:
+            question: User's natural language question
+            sql_query: The SQL that returned results
+            row_count: Number of rows returned
+            created_by: Slack user ID or 'bot'
+        """
+        sql = """
+            INSERT INTO analytics.bot_query_patterns
+                (question_text, sql_query, row_count, was_successful, created_by)
+            VALUES (%s, %s, %s, true, %s)
+        """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (question, sql_query, row_count, created_by))
+                    conn.commit()
+            logger.info("Saved query pattern: %s", question[:80])
+        except Exception as e:
+            logger.error("Failed to save query pattern: %s", str(e))
+
+    def mark_pattern_feedback(self, interaction_id: int, feedback: str):
+        """
+        Update user feedback on a query pattern (positive/negative).
+
+        Args:
+            interaction_id: ID in bot_query_patterns
+            feedback: 'positive' or 'negative'
+        """
+        sql = """
+            UPDATE analytics.bot_query_patterns
+            SET user_feedback = %s
+            WHERE id = %s
+        """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (feedback, interaction_id))
+                    conn.commit()
+            logger.info("Marked pattern %d as %s", interaction_id, feedback)
+        except Exception as e:
+            logger.error("Failed to mark pattern feedback: %s", str(e))
+
+    def get_latest_pattern_id(self, question: str) -> int:
+        """Get the ID of the most recently saved pattern for a question."""
+        sql = """
+            SELECT id FROM analytics.bot_query_patterns
+            WHERE question_text = %s
+            ORDER BY created_at DESC LIMIT 1
+        """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (question,))
+                    row = cur.fetchone()
+                    return row[0] if row else None
+        except Exception as e:
+            logger.error("Failed to get latest pattern id: %s", str(e))
+            return None
 
     def log_bot_interaction(self, interaction_data: dict):
         """
