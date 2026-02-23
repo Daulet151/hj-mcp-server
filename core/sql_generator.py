@@ -122,6 +122,17 @@ class SQLGenerator:
                 context_msg = self._build_context_message(conversation_context)
                 system_text += "\n\n" + context_msg
 
+            # Try to extract schema.table from the failed SQL and fetch real columns
+            real_columns_info = ""
+            if self.db_manager:
+                from_match = re.search(r'FROM\s+([\w]+)\.([\w]+)', failed_sql, re.IGNORECASE)
+                if from_match:
+                    schema_name, table_name = from_match.group(1), from_match.group(2)
+                    real_cols = self.db_manager.get_table_columns(schema_name, table_name)
+                    if real_cols:
+                        real_columns_info = f"\nРЕАЛЬНЫЕ КОЛОНКИ таблицы {schema_name}.{table_name}:\n{', '.join(real_cols)}\nИСПОЛЬЗУЙ ТОЛЬКО ЭТИ КОЛОНКИ!\n"
+                        logger.info("Fetched %d real columns for %s.%s", len(real_cols), schema_name, table_name)
+
             retry_prompt = f"""Запрос пользователя: {user_prompt}
 
 Предыдущий SQL запрос вернул ошибку:
@@ -130,7 +141,7 @@ SQL:
 
 Ошибка PostgreSQL:
 {error_message}
-
+{real_columns_info}
 Исправь SQL запрос, учитывая ошибку. Используй ТОЛЬКО реальные колонки из документации схемы.
 Если ошибка связана с несуществующей колонкой — удали её или замени правильной.
 Верни ТОЛЬКО исправленный SQL без объяснений."""

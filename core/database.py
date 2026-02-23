@@ -139,6 +139,33 @@ class DatabaseManager:
 
         return self.execute_query(sql)
 
+    def get_table_columns(self, schema: str, table: str) -> list:
+        """
+        Get real column names for a specific table from information_schema.
+
+        Args:
+            schema: Schema name (e.g. 'raw', 'olap_schema')
+            table: Table name
+
+        Returns:
+            List of column name strings, or empty list if table not found
+        """
+        sql = """
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = %s AND table_name = %s
+            ORDER BY ordinal_position
+        """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, (schema, table))
+                    rows = cur.fetchall()
+                    return [row[0] for row in rows]
+        except Exception as e:
+            logger.error("Failed to get table columns: %s", str(e))
+            return []
+
     def log_bot_user(self, user_info: dict):
         """
         Insert or update bot user information in analytics.bot_users.
