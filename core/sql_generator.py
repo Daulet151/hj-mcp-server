@@ -407,6 +407,16 @@ class SQLGenerator:
         5. Колонка "user" обязательно должна использвться с двойными кавычками "user"
         6. Запрещены: DROP, DELETE, UPDATE, INSERT, ALTER, TRUNCATE
 
+        ⚠️ КРИТИЧЕСКИ ВАЖНО — НИКОГДА НЕ ВОЗВРАЩАЙ ГОЛЫЕ ID:
+        - Если в результате есть FK-колонка (award, marathonevent, user, clan, event и т.д.) — ВСЕГДА делай JOIN чтобы получить человекочитаемое название
+        - Примеры:
+          ❌ SELECT award FROM useraward → возвращает "611208d4b8fd8d00172c81f0" — ЗАПРЕЩЕНО
+          ✅ SELECT ua.*, aw.name as award_name FROM useraward ua LEFT JOIN raw.award aw ON ua.award = aw.id
+          ❌ SELECT marathonevent FROM useraward → возвращает голый ID
+          ✅ SELECT ua.*, me.name as marathon_name FROM useraward ua LEFT JOIN raw.marathonevent me ON ua.marathonevent = me.id
+        - Если JOIN невозможен (таблица неизвестна), хотя бы включи name/title/description из основной таблицы
+        - Пользователь должен видеть НАЗВАНИЯ, не технические ID
+
         ⚠️ ВАЖНО ПРО ГОД:
         - Если пользователь НЕ указал конкретный год в запросе, ВСЕГДА используй 2025 год
         - Примеры:

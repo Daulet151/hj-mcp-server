@@ -170,6 +170,9 @@ class AnalyticalAgent:
 
                 logger.info(f"Query returned {len(df)} rows × {len(df.columns)} columns")
 
+                # Step 3.5: Enrich DataFrame — resolve bare IDs into human-readable names
+                df = self._enrich_id_columns(df)
+
                 # Step 4: Prepare data summary for analysis
                 data_summary = self._create_data_summary(df)
 
@@ -219,6 +222,85 @@ class AnalyticalAgent:
             None,
             last_sql
         )
+
+    # Maps a FK column name to (schema, table, name_column)
+    # These are the most common FK columns that carry bare IDs users never want to see
+    _FK_LOOKUPS = {
+        "award":        ("raw",         "award",         "name"),
+        "marathonevent":("raw",         "marathonevent", "name"),
+        "event":        ("raw",         "event",         "name"),
+        "clan":         ("raw",         "clan",          "name"),
+        "user":         ("raw",         "user",          "username"),
+        "booking":      ("raw",         "booking",       "id"),   # no good name col, skip
+    }
+    # MongoDB-style ObjectId: exactly 24 hex chars
+    _OBJECTID_RE = re.compile(r'^[0-9a-f]{24}$', re.IGNORECASE)
+
+    def _enrich_id_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Post-process DataFrame: for columns that contain bare IDs (FK references),
+        lookup the human-readable name and add a new '*_name' column next to the ID column.
+        Modifies df in place and returns it.
+        """
+        if df is None or df.empty:
+            return df
+
+        for col in list(df.columns):
+            # Skip if already has a sibling _name column
+            if f"{col}_name" in df.columns:
+                continue
+
+            col_lower = col.lower()
+
+            # Check if column is a known FK
+            lookup = self._FK_LOOKUPS.get(col_lower)
+
+            # Also auto-detect: column name ends in 'id' or the values look like MongoDB ObjectIds
+            if lookup is None:
+                sample_vals = df[col].dropna().astype(str).head(5).tolist()
+                all_objectids = sample_vals and all(self._OBJECTID_RE.match(v) for v in sample_vals)
+                if not all_objectids:
+                    continue
+                # Try to guess table from column name (e.g. "awardid" → "award")
+                guessed_table = col_lower.rstrip("id").rstrip("_")
+                lookup = ("raw", guessed_table, "name")
+
+            schema, table, name_col = lookup
+            # Skip degenerate lookups (e.g. booking has no useful name)
+            if name_col == "id":
+                continue
+
+            # Collect unique IDs to look up
+            unique_ids = df[col].dropna().astype(str).unique().tolist()
+            if not unique_ids:
+                continue
+
+            try:
+                placeholders = ",".join(["%s"] * len(unique_ids))
+                sql = f'SELECT id, "{name_col}" FROM "{schema}"."{table}" WHERE id IN ({placeholders})'
+                with self.db_manager.get_connection() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(sql, unique_ids)
+                        rows = cur.fetchall()
+
+                if not rows:
+                    continue
+
+                id_to_name = {row[0]: row[1] for row in rows}
+                new_col = f"{col}_name"
+                df.insert(
+                    df.columns.get_loc(col) + 1,
+                    new_col,
+                    df[col].astype(str).map(id_to_name)
+                )
+                resolved = sum(1 for v in df[new_col] if v and str(v) != "nan")
+                logger.info("Enriched column '%s' → '%s': %d/%d IDs resolved from %s.%s",
+                            col, new_col, resolved, len(df), schema, table)
+
+            except Exception as e:
+                logger.warning("Could not enrich column '%s' from %s.%s: %s", col, schema, table, e)
+
+        return df
 
     def _create_data_summary(self, df: pd.DataFrame) -> str:
         """Create a concise summary of DataFrame for AI analysis."""
