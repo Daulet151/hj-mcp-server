@@ -146,11 +146,15 @@ class AnalyticalAgent:
                 logger.info("Executing SQL query...")
                 df = self.db_manager.execute_query(sql_query)
 
-                # Step 3: Check if we have data
+                # Step 3: Check if we have data — treat empty result as failure and retry
                 if df is None or df.empty:
-                    logger.warning("Query returned no data")
+                    logger.warning("Query returned no data, will retry with different approach")
+                    last_error = "Запрос вернул 0 строк. Возможно неправильная таблица, схема или условия фильтрации. Попробуй другой подход: другую таблицу, другую схему (raw, stage, ods_core), или ослабь условия WHERE."
+                    if attempt < max_retries:
+                        continue
+                    # All retries exhausted — return empty result message
                     return (
-                        "Запрос выполнен успешно, но не вернул данных. Возможно, нет пользователей соответствующих критериям. 🤔",
+                        "Запрос выполнен успешно, но не вернул данных даже после нескольких попыток. Возможно, таких данных нет в базе. 🤔",
                         None,
                         sql_query
                     )
