@@ -110,6 +110,7 @@ class AnalyticalAgent:
     def analyze(self, user_query: str, conversation_context: dict = None) -> Tuple[str, Optional[pd.DataFrame], Optional[str]]:
         """
         Analyze user's data extraction query by executing SQL and analyzing results.
+        Retries up to 2 times if SQL execution fails, passing the error back to Claude.
 
         Args:
             user_query: User's data extraction request
@@ -121,63 +122,80 @@ class AnalyticalAgent:
             - dataframe: Query results (for Excel generation later)
             - sql_query: Generated SQL query
         """
-        try:
-            logger.info(f"Analyzing query with real data: {user_query[:100]}")
+        max_retries = 2
+        last_error = None
+        last_sql = None
 
-            # Step 1: Generate SQL query (with conversation context for follow-ups)
-            logger.info("Generating SQL query...")
-            sql_query = self.sql_generator.generate_query(user_query, conversation_context)
-            logger.info(f"Generated SQL: {sql_query[:100]}...")
+        for attempt in range(max_retries + 1):
+            try:
+                logger.info(f"Analyzing query with real data (attempt {attempt + 1}): {user_query[:100]}")
 
-            # Step 2: Execute query
-            logger.info("Executing SQL query...")
-            df = self.db_manager.execute_query(sql_query)
+                # Step 1: Generate SQL query (pass error from previous attempt for self-correction)
+                logger.info("Generating SQL query...")
+                if attempt == 0:
+                    sql_query = self.sql_generator.generate_query(user_query, conversation_context)
+                else:
+                    logger.info(f"Retrying SQL generation with error feedback: {last_error}")
+                    sql_query = self.sql_generator.generate_query_with_error(
+                        user_query, last_sql, str(last_error), conversation_context
+                    )
+                last_sql = sql_query
+                logger.info(f"Generated SQL: {sql_query[:100]}...")
 
-            # Step 3: Check if we have data
-            if df is None or df.empty:
-                logger.warning("Query returned no data")
-                return (
-                    "Запрос выполнен успешно, но не вернул данных. Возможно, нет пользователей соответствующих критериям. 🤔",
-                    None,
-                    sql_query
-                )
+                # Step 2: Execute query
+                logger.info("Executing SQL query...")
+                df = self.db_manager.execute_query(sql_query)
 
-            logger.info(f"Query returned {len(df)} rows × {len(df.columns)} columns")
+                # Step 3: Check if we have data
+                if df is None or df.empty:
+                    logger.warning("Query returned no data")
+                    return (
+                        "Запрос выполнен успешно, но не вернул данных. Возможно, нет пользователей соответствующих критериям. 🤔",
+                        None,
+                        sql_query
+                    )
 
-            # Step 4: Prepare data summary for analysis
-            data_summary = self._create_data_summary(df)
+                logger.info(f"Query returned {len(df)} rows × {len(df.columns)} columns")
 
-            # Step 5: Analyze with Claude
-            logger.info("Analyzing data with AI...")
-            response = self.client.messages.create(
-                model=self.model,
-                system=self.analysis_prompt,
-                messages=[
-                    {"role": "user", "content": f"""Запрос пользователя: {user_query}
+                # Step 4: Prepare data summary for analysis
+                data_summary = self._create_data_summary(df)
+
+                # Step 5: Analyze with Claude
+                logger.info("Analyzing data with AI...")
+                response = self.client.messages.create(
+                    model=self.model,
+                    system=self.analysis_prompt,
+                    messages=[
+                        {"role": "user", "content": f"""Запрос пользователя: {user_query}
 
 Данные из базы:
 {data_summary}
 
 Проанализируй эти данные и дай инсайты."""}
-                ],
-                temperature=0.7,
-                max_tokens=1000
-            )
+                    ],
+                    temperature=0.7,
+                    max_tokens=1000
+                )
 
-            analysis = response.content[0].text.strip()
-            logger.info("Analysis with real data generated successfully")
+                analysis = response.content[0].text.strip()
+                logger.info("Analysis with real data generated successfully")
 
-            return (analysis, df, sql_query)
+                return (analysis, df, sql_query)
 
-        except Exception as e:
-            logger.error(f"Error during analysis: {e}")
-            return (
-                f"""Произошла ошибка при анализе данных: {str(e)} 😔
+            except Exception as e:
+                last_error = e
+                logger.error(f"Error during analysis (attempt {attempt + 1}): {e}")
+                if attempt < max_retries:
+                    logger.info(f"Will retry with error feedback...")
+                    continue
+
+        return (
+            f"""Произошла ошибка при анализе данных: {str(last_error)} 😔
 
 Попробуйте переформулировать запрос или уточнить критерии.""",
-                None,
-                None
-            )
+            None,
+            last_sql
+        )
 
     def _create_data_summary(self, df: pd.DataFrame) -> str:
         """Create a concise summary of DataFrame for AI analysis."""

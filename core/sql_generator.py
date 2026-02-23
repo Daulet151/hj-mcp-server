@@ -86,6 +86,61 @@ class SQLGenerator:
             logger.error("Failed to generate SQL: %s", str(e))
             raise
 
+    def generate_query_with_error(self, user_prompt: str, failed_sql: str, error_message: str, conversation_context: dict = None) -> str:
+        """
+        Retry SQL generation with error feedback for self-correction.
+
+        Args:
+            user_prompt: Original natural language question
+            failed_sql: The SQL that failed
+            error_message: The error from the database
+            conversation_context: Optional conversation context
+
+        Returns:
+            Corrected SQL query string
+        """
+        if not self.system_prompt:
+            raise ValueError("Schema not set. Call set_schema() first.")
+
+        logger.info("Retrying SQL generation with error feedback")
+
+        try:
+            system_text = self.system_prompt
+            if conversation_context:
+                context_msg = self._build_context_message(conversation_context)
+                system_text += "\n\n" + context_msg
+
+            retry_prompt = f"""Запрос пользователя: {user_prompt}
+
+Предыдущий SQL запрос вернул ошибку:
+SQL:
+{failed_sql}
+
+Ошибка PostgreSQL:
+{error_message}
+
+Исправь SQL запрос, учитывая ошибку. Используй ТОЛЬКО реальные колонки из документации схемы.
+Если ошибка связана с несуществующей колонкой — удали её или замени правильной.
+Верни ТОЛЬКО исправленный SQL без объяснений."""
+
+            response = self.client.messages.create(
+                model=self.model,
+                system=system_text,
+                messages=[{"role": "user", "content": retry_prompt}],
+                temperature=0.0,
+                max_tokens=2000
+            )
+
+            sql_output = response.content[0].text.strip()
+            sql_output = self._extract_sql_from_response(sql_output)
+
+            logger.info("Corrected SQL generated successfully")
+            return sql_output
+
+        except Exception as e:
+            logger.error("Failed to generate corrected SQL: %s", str(e))
+            raise
+
     def _build_context_message(self, ctx: dict) -> str:
         """
         Build conversation context message for follow-up SQL generation.
