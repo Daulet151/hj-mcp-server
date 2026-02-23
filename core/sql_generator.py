@@ -64,6 +64,106 @@ class SQLGenerator:
             len(tables), len(self.system_prompt)
         )
 
+    def discover_relevant_tables(self, user_prompt: str, max_tables: int = 5) -> str:
+        """
+        Phase 0: Ask Claude which tables are likely relevant, then sample each one
+        to show Claude what the data actually looks like before generating SQL.
+
+        Args:
+            user_prompt: The user's natural language question
+            max_tables: Max number of tables to sample
+
+        Returns:
+            A text block describing the sampled tables (columns + sample rows),
+            ready to be injected into the SQL generation prompt.
+            Returns empty string if db_manager not set or no tables found.
+        """
+        if not self.db_manager or not self._live_tables:
+            return ""
+
+        # Build flat table list for Claude to pick from
+        all_tables_flat = []
+        for schema_name in ("olap_schema", "raw", "stage", "ods_core"):
+            for tbl in self._live_tables.get(schema_name, []):
+                all_tables_flat.append(f"{schema_name}.{tbl}")
+
+        if not all_tables_flat:
+            return ""
+
+        tables_list = "\n".join(all_tables_flat)
+
+        # Ask Claude to pick the most relevant tables
+        pick_prompt = f"""Ниже список ВСЕХ таблиц в базе данных:
+
+{tables_list}
+
+Вопрос пользователя: {user_prompt}
+
+Выбери до {max_tables} таблиц, которые НАИБОЛЕЕ вероятно содержат нужные данные.
+Ответь ТОЛЬКО списком таблиц в формате schema.table, по одной на строку. Никаких объяснений."""
+
+        try:
+            pick_response = self.client.messages.create(
+                model=self.model,
+                system="Ты эксперт по базам данных. Отвечай только списком таблиц.",
+                messages=[{"role": "user", "content": pick_prompt}],
+                temperature=0.0,
+                max_tokens=200
+            )
+            picked_raw = pick_response.content[0].text.strip()
+            logger.info("Claude picked tables for discovery:\n%s", picked_raw)
+        except Exception as e:
+            logger.error("Failed to pick tables for discovery: %s", e)
+            return ""
+
+        # Parse picked tables
+        picked = []
+        for line in picked_raw.splitlines():
+            line = line.strip().strip("-").strip()
+            if "." in line:
+                parts = line.split(".", 1)
+                schema_name, table_name = parts[0].strip(), parts[1].strip()
+                # Validate it's actually in our live tables
+                if table_name in self._live_tables.get(schema_name, []):
+                    picked.append((schema_name, table_name))
+            if len(picked) >= max_tables:
+                break
+
+        if not picked:
+            logger.warning("No valid tables picked for discovery")
+            return ""
+
+        # Sample each picked table and build discovery block
+        discovery_parts = ["=== РАЗВЕДКА ДАННЫХ (реальное содержимое таблиц) ===",
+                           "Перед генерацией SQL я посмотрел на реальные данные в потенциально нужных таблицах:\n"]
+
+        for schema_name, table_name in picked:
+            sample = self.db_manager.sample_table_data(schema_name, table_name, limit=3)
+            if not sample["columns"]:
+                discovery_parts.append(f"Таблица {schema_name}.{table_name}: нет доступа или пустая\n")
+                continue
+
+            discovery_parts.append(f"Таблица: {schema_name}.{table_name}")
+            discovery_parts.append(f"Колонки: {', '.join(sample['columns'])}")
+            if sample["rows"]:
+                discovery_parts.append("Примеры строк:")
+                for row in sample["rows"]:
+                    # Show truncated values to keep prompt size reasonable
+                    row_preview = {k: (str(v)[:80] if v is not None else "NULL") for k, v in row.items()}
+                    discovery_parts.append(f"  {row_preview}")
+            else:
+                discovery_parts.append("  (таблица пустая)")
+            discovery_parts.append("")
+
+            logger.info("Sampled %s.%s: %d cols, %d rows",
+                        schema_name, table_name, len(sample["columns"]), len(sample["rows"]))
+
+        discovery_parts.append(
+            "Используй эти данные для понимания структуры таблиц перед написанием SQL."
+        )
+
+        return "\n".join(discovery_parts)
+
     def generate_query(self, user_prompt: str, conversation_context: dict = None) -> str:
         """
         Generate SQL query from natural language prompt.
@@ -93,6 +193,12 @@ class SQLGenerator:
                 context_msg = self._build_context_message(conversation_context)
                 system_text += "\n\n" + context_msg
                 logger.info("Added conversation context to SQL generation")
+
+            # Phase 0: Data Discovery — sample relevant tables so Claude sees real column content
+            discovery_block = self.discover_relevant_tables(user_prompt)
+            if discovery_block:
+                system_text += "\n\n" + discovery_block
+                logger.info("Injected data discovery block into SQL prompt")
 
             # Inject cached successful queries as additional examples
             if self.db_manager:

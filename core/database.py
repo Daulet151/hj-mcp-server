@@ -116,6 +116,30 @@ class DatabaseManager:
             logger.error("Database connection test failed: %s", str(e))
             return False
 
+    def sample_table_data(self, schema: str, table: str, limit: int = 3) -> dict:
+        """
+        Fetch a small sample of rows from a table to inspect column content.
+
+        Args:
+            schema: Schema name
+            table: Table name
+            limit: Number of rows to fetch
+
+        Returns:
+            Dict with 'columns' (list of names) and 'rows' (list of dicts), or empty on error
+        """
+        sql = f'SELECT * FROM "{schema}"."{table}" LIMIT {limit}'
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql)
+                    cols = [desc[0] for desc in cur.description]
+                    rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+            return {"columns": cols, "rows": rows}
+        except Exception as e:
+            logger.error("Failed to sample %s.%s: %s", schema, table, str(e))
+            return {"columns": [], "rows": []}
+
     def get_all_schemas_tables(self) -> dict:
         """
         Get all tables from all schemas (raw, stage, ods_core, olap_schema) grouped by schema.
