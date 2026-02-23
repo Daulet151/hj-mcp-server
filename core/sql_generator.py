@@ -127,7 +127,8 @@ class SQLGenerator:
             logger.error("Failed to generate SQL: %s", str(e))
             raise
 
-    def generate_query_with_error(self, user_prompt: str, failed_sql: str, error_message: str, conversation_context: dict = None) -> str:
+    def generate_query_with_error(self, user_prompt: str, failed_sql: str, error_message: str,
+                                   conversation_context: dict = None, tried_tables: set = None) -> str:
         """
         Retry SQL generation with error feedback for self-correction.
 
@@ -136,6 +137,7 @@ class SQLGenerator:
             failed_sql: The SQL that failed
             error_message: The error from the database
             conversation_context: Optional conversation context
+            tried_tables: Set of "schema.table" strings already tried (to avoid repeating)
 
         Returns:
             Corrected SQL query string
@@ -151,29 +153,63 @@ class SQLGenerator:
                 context_msg = self._build_context_message(conversation_context)
                 system_text += "\n\n" + context_msg
 
-            # Try to extract schema.table from the failed SQL and fetch real columns
+            is_empty_result = "0 строк" in error_message or "вернул 0" in error_message.lower()
+
+            # Extract schema.table from the failed SQL
             real_columns_info = ""
+            failed_schema_table = None
             if self.db_manager:
                 from_match = re.search(r'FROM\s+([\w]+)\.([\w]+)', failed_sql, re.IGNORECASE)
                 if from_match:
                     schema_name, table_name = from_match.group(1), from_match.group(2)
-                    real_cols = self.db_manager.get_table_columns(schema_name, table_name)
-                    if real_cols:
-                        real_columns_info = f"\nРЕАЛЬНЫЕ КОЛОНКИ таблицы {schema_name}.{table_name}:\n{', '.join(real_cols)}\nИСПОЛЬЗУЙ ТОЛЬКО ЭТИ КОЛОНКИ!\n"
-                        logger.info("Fetched %d real columns for %s.%s", len(real_cols), schema_name, table_name)
+                    failed_schema_table = f"{schema_name}.{table_name}"
+
+                    if not is_empty_result:
+                        # Real SQL error (column missing, syntax, etc.) — inject real columns to help fix
+                        real_cols = self.db_manager.get_table_columns(schema_name, table_name)
+                        if real_cols:
+                            real_columns_info = (
+                                f"\nРЕАЛЬНЫЕ КОЛОНКИ таблицы {schema_name}.{table_name}:\n"
+                                f"{', '.join(real_cols)}\nИСПОЛЬЗУЙ ТОЛЬКО ЭТИ КОЛОНКИ!\n"
+                            )
+                            logger.info("Fetched %d real columns for %s.%s", len(real_cols), schema_name, table_name)
+
+            # Build tried_tables block for the prompt
+            tried_block = ""
+            all_tried = set(tried_tables or set())
+            if failed_schema_table:
+                all_tried.add(failed_schema_table)
+            if all_tried:
+                tried_list = ", ".join(sorted(all_tried))
+                tried_block = (
+                    f"\n⛔ УЖЕ ПРОБОВАЛИ ЭТИ ТАБЛИЦЫ (данных нет или ошибка) — НЕ ИСПОЛЬЗУЙ ИХ СНОВА:\n"
+                    f"{tried_list}\n"
+                    f"✅ ОБЯЗАТЕЛЬНО используй ДРУГУЮ таблицу или ДРУГУЮ схему (raw, stage, ods_core, olap_schema).\n"
+                )
+
+            if is_empty_result:
+                instruction = (
+                    "Запрос вернул 0 строк — данных в этой таблице нет.\n"
+                    "ОБЯЗАТЕЛЬНО смени таблицу или схему. Посмотри в других схемах: raw, stage, ods_core, olap_schema.\n"
+                    "Попробуй найти похожие данные в другой таблице из списка доступных таблиц выше.\n"
+                    "Верни ТОЛЬКО новый SQL без объяснений."
+                )
+            else:
+                instruction = (
+                    "Исправь SQL запрос, учитывая ошибку. Используй ТОЛЬКО реальные колонки из документации схемы.\n"
+                    "Если ошибка связана с несуществующей колонкой — удали её или замени правильной.\n"
+                    "Верни ТОЛЬКО исправленный SQL без объяснений."
+                )
 
             retry_prompt = f"""Запрос пользователя: {user_prompt}
 
-Предыдущий SQL запрос вернул ошибку:
-SQL:
+Предыдущий SQL:
 {failed_sql}
 
-Ошибка PostgreSQL:
+Результат:
 {error_message}
-{real_columns_info}
-Исправь SQL запрос, учитывая ошибку. Используй ТОЛЬКО реальные колонки из документации схемы.
-Если ошибка связана с несуществующей колонкой — удали её или замени правильной.
-Верни ТОЛЬКО исправленный SQL без объяснений."""
+{tried_block}{real_columns_info}
+{instruction}"""
 
             response = self.client.messages.create(
                 model=self.model,

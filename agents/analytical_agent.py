@@ -3,6 +3,7 @@ Analytical Agent
 Analyzes data extraction queries using schema documentation from YML files
 Executes SQL and provides real data insights
 """
+import re
 from typing import Dict, Any, Optional, Tuple
 from anthropic import Anthropic
 import pandas as pd
@@ -125,6 +126,7 @@ class AnalyticalAgent:
         max_retries = 10
         last_error = None
         last_sql = None
+        tried_tables = set()  # Track schema.table already tried to avoid repeat loops
 
         for attempt in range(max_retries + 1):
             try:
@@ -137,10 +139,17 @@ class AnalyticalAgent:
                 else:
                     logger.info(f"Retrying SQL generation with error feedback: {last_error}")
                     sql_query = self.sql_generator.generate_query_with_error(
-                        user_query, last_sql, str(last_error), conversation_context
+                        user_query, last_sql, str(last_error), conversation_context,
+                        tried_tables=tried_tables
                     )
                 last_sql = sql_query
                 logger.info(f"Generated SQL: {sql_query[:100]}...")
+
+                # Track which schema.table was used in this attempt
+                for m in re.finditer(r'FROM\s+([\w]+)\.([\w]+)', sql_query, re.IGNORECASE):
+                    tried_tables.add(f"{m.group(1)}.{m.group(2)}")
+                if tried_tables:
+                    logger.info("Tried tables so far: %s", ", ".join(sorted(tried_tables)))
 
                 # Step 2: Execute query
                 logger.info("Executing SQL query...")
@@ -149,7 +158,7 @@ class AnalyticalAgent:
                 # Step 3: Check if we have data — treat empty result as failure and retry
                 if df is None or df.empty:
                     logger.warning("Query returned no data, will retry with different approach")
-                    last_error = "Запрос вернул 0 строк. Возможно неправильная таблица, схема или условия фильтрации. Попробуй другой подход: другую таблицу, другую схему (raw, stage, ods_core), или ослабь условия WHERE."
+                    last_error = "Запрос вернул 0 строк. Данных в этой таблице нет — нужна другая таблица или схема."
                     if attempt < max_retries:
                         continue
                     # All retries exhausted — return empty result message
