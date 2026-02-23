@@ -13,7 +13,7 @@ sql:
     users_with_hero_pass AS (
       SELECT DISTINCT "user", firstname, lastname, email, phonenumber
       FROM olap_schema.userheropass
-      WHERE hp_name IN ('Полугодовой Hero''s Pass', 'Годовой Hero''s Pass')
+      WHERE hp_name IN ('Полугодовой Hero`s Pass', 'Годовой Hero`s Pass')
         AND club_name = 'HJ Promenade'
         AND status = 'active'
     ),
