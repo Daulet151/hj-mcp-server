@@ -142,7 +142,7 @@ def get_slack_user_info(user_id: str) -> dict:
         }
 
 
-def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
+def process_slack_query(user_prompt: str, channel_id: str, user_id: str, thread_ts: str = None):
     """
     Process user query using multi-agent system.
 
@@ -160,7 +160,7 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
     start_time = time.time()
 
     # Send typing indicator immediately
-    typing_message_ts = post_slack_typing_indicator(channel_id)
+    typing_message_ts = post_slack_typing_indicator(channel_id, thread_ts)
 
     # Initialize interaction data
     interaction_data = {
@@ -200,7 +200,7 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
             update_slack_message(channel_id, typing_message_ts, response_text)
         else:
             # Fallback: send as new message if typing indicator failed
-            post_slack_text_message(channel_id, response_text)
+            post_slack_text_message(channel_id, response_text, thread_ts)
 
         # If should generate table, proceed with Excel generation
         if should_generate_table:
@@ -243,7 +243,7 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
 
                 if excel_generator.dataframe_is_empty(df):
                     result = "Запрос выполнен успешно, но не вернул данных (результат пуст)."
-                    post_slack_message_and_file(channel_id, sql_query, result)
+                    post_slack_message_and_file(channel_id, sql_query, result, thread_ts=thread_ts)
 
                     # Log interaction
                     db_manager.log_bot_interaction(interaction_data)
@@ -252,7 +252,7 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
                     excel_buffer = excel_generator.create_excel_buffer(df)
 
                     # Send to Slack
-                    post_slack_message_and_file(channel_id, sql_query, excel_buffer)
+                    post_slack_message_and_file(channel_id, sql_query, excel_buffer, thread_ts=thread_ts)
 
                     # Update and log interaction
                     interaction_data['table_generated'] = True
@@ -267,7 +267,7 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
                 interaction_data['error_message'] = str(db_error)
                 db_manager.log_bot_interaction(interaction_data)
 
-                post_slack_message_and_file(channel_id, sql_query, error_msg)
+                post_slack_message_and_file(channel_id, sql_query, error_msg, thread_ts=thread_ts)
         else:
             # No table generation - just log the interaction
             db_manager.log_bot_interaction(interaction_data)
@@ -284,10 +284,10 @@ def process_slack_query(user_prompt: str, channel_id: str, user_id: str):
         if typing_message_ts:
             update_slack_message(channel_id, typing_message_ts, f"*{error_msg}*")
         else:
-            post_slack_error(channel_id, error_msg)
+            post_slack_error(channel_id, error_msg, thread_ts)
 
 
-def post_slack_message_and_file(channel_id: str, sql_query: str, file_buffer_or_error, filename: str = "query_result.xlsx"):
+def post_slack_message_and_file(channel_id: str, sql_query: str, file_buffer_or_error, filename: str = "query_result.xlsx", thread_ts: str = None):
     """
     Send SQL query and Excel file to Slack using new upload protocol.
 
@@ -313,6 +313,8 @@ def post_slack_message_and_file(channel_id: str, sql_query: str, file_buffer_or_
             {"type": "section", "text": {"type": "mrkdwn", "text": message_text}}
         ]
     }
+    if thread_ts:
+        message_payload["thread_ts"] = thread_ts
 
     try:
         response = requests.post(
@@ -376,14 +378,18 @@ def post_slack_message_and_file(channel_id: str, sql_query: str, file_buffer_or_
                 return
 
             # Step 3: Complete upload
+            complete_payload = {
+                "files": [{"id": file_id, "title": filename}],
+                "channel_id": channel_id,
+                "initial_comment": "*✅ Результат запроса в прикрепленном Excel-файле!*",
+            }
+            if thread_ts:
+                complete_payload["thread_ts"] = thread_ts
+
             complete_response = requests.post(
                 "https://slack.com/api/files.completeUploadExternal",
                 headers={"Authorization": f"Bearer {Config.SLACK_BOT_TOKEN}", "Content-Type": "application/json"},
-                data=json.dumps({
-                    "files": [{"id": file_id, "title": filename}],
-                    "channel_id": channel_id,
-                    "initial_comment": "*✅ Результат запроса в прикрепленном Excel-файле!*",
-                }),
+                data=json.dumps(complete_payload),
                 timeout=10
             ).json()
 
@@ -396,7 +402,7 @@ def post_slack_message_and_file(channel_id: str, sql_query: str, file_buffer_or_
             logger.error("Failed to upload file to Slack: %s", str(e))
 
 
-def post_slack_typing_indicator(channel_id: str) -> str:
+def post_slack_typing_indicator(channel_id: str, thread_ts: str = None) -> str:
     """
     Send typing indicator message to Slack and return message timestamp.
 
@@ -411,17 +417,21 @@ def post_slack_typing_indicator(channel_id: str) -> str:
         return None
 
     try:
+        typing_payload = {
+            "channel": channel_id,
+            "text": "🤖 _AI Data Analyst анализирует данные..._",
+            "mrkdwn": True
+        }
+        if thread_ts:
+            typing_payload["thread_ts"] = thread_ts
+
         response = requests.post(
             "https://slack.com/api/chat.postMessage",
             headers={
                 "Authorization": f"Bearer {Config.SLACK_BOT_TOKEN}",
                 "Content-Type": "application/json"
             },
-            data=json.dumps({
-                "channel": channel_id,
-                "text": "🤖 _AI Data Analyst анализирует данные..._",
-                "mrkdwn": True
-            }),
+            data=json.dumps(typing_payload),
             timeout=10
         )
         response.raise_for_status()
@@ -478,7 +488,7 @@ def update_slack_message(channel_id: str, message_ts: str, text: str):
         logger.error("Failed to update message in Slack: %s", str(e))
 
 
-def post_slack_text_message(channel_id: str, text: str):
+def post_slack_text_message(channel_id: str, text: str, thread_ts: str = None):
     """
     Send text message to Slack.
 
@@ -491,17 +501,17 @@ def post_slack_text_message(channel_id: str, text: str):
         return
 
     try:
+        text_payload = {"channel": channel_id, "text": text, "mrkdwn": True}
+        if thread_ts:
+            text_payload["thread_ts"] = thread_ts
+
         response = requests.post(
             "https://slack.com/api/chat.postMessage",
             headers={
                 "Authorization": f"Bearer {Config.SLACK_BOT_TOKEN}",
                 "Content-Type": "application/json"
             },
-            data=json.dumps({
-                "channel": channel_id,
-                "text": text,
-                "mrkdwn": True
-            }),
+            data=json.dumps(text_payload),
             timeout=10
         )
         response.raise_for_status()
@@ -510,19 +520,23 @@ def post_slack_text_message(channel_id: str, text: str):
         logger.error("Failed to send text message to Slack: %s", str(e))
 
 
-def post_slack_error(channel_id: str, error_message: str):
+def post_slack_error(channel_id: str, error_message: str, thread_ts: str = None):
     """Send error message to Slack."""
     if not Config.SLACK_BOT_TOKEN:
         return
 
     try:
+        error_payload = {
+            "channel": channel_id,
+            "text": f"*⚠️ Ошибка:*\n`{error_message}`"
+        }
+        if thread_ts:
+            error_payload["thread_ts"] = thread_ts
+
         requests.post(
             "https://slack.com/api/chat.postMessage",
             headers={"Authorization": f"Bearer {Config.SLACK_BOT_TOKEN}", "Content-Type": "application/json"},
-            data=json.dumps({
-                "channel": channel_id,
-                "text": f"*⚠️ Ошибка:*\n`{error_message}`"
-            }),
+            data=json.dumps(error_payload),
             timeout=10
         )
     except Exception as e:
@@ -552,6 +566,7 @@ def slack_events():
         user_prompt = event.get('text', '').strip()
         channel_id = event.get('channel')
         user_id = event.get('user', 'unknown')
+        thread_ts = event.get('thread_ts') or event.get('ts')
 
         if not user_prompt:
             return "OK", 200
@@ -561,7 +576,7 @@ def slack_events():
         # Process in background thread to avoid Slack timeout
         thread = threading.Thread(
             target=process_slack_query,
-            args=(user_prompt, channel_id, user_id),
+            args=(user_prompt, channel_id, user_id, thread_ts),
             daemon=True
         )
         thread.start()
