@@ -46,6 +46,9 @@ db_manager = DatabaseManager(
 # Enable SQL caching: inject db_manager so sql_generator can use past successful queries
 sql_generator.db_manager = db_manager
 
+# Load all live tables from DB into the system prompt
+sql_generator.load_live_tables()
+
 excel_generator = ExcelGenerator()
 
 # Initialize multi-agent orchestrator

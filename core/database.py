@@ -116,6 +116,35 @@ class DatabaseManager:
             logger.error("Database connection test failed: %s", str(e))
             return False
 
+    def get_all_schemas_tables(self) -> dict:
+        """
+        Get all tables from all schemas (raw, stage, ods_core, olap_schema) grouped by schema.
+
+        Returns:
+            Dict mapping schema_name -> list of table names
+        """
+        sql = """
+            SELECT table_schema, table_name
+            FROM information_schema.tables
+            WHERE table_schema IN ('raw', 'stage', 'ods_core', 'olap_schema')
+              AND table_type = 'BASE TABLE'
+            ORDER BY table_schema, table_name
+        """
+        try:
+            with self.get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql)
+                    rows = cur.fetchall()
+            result = {}
+            for schema_name, table_name in rows:
+                result.setdefault(schema_name, []).append(table_name)
+            total = sum(len(v) for v in result.values())
+            logger.info("Loaded %d tables from %d schemas", total, len(result))
+            return result
+        except Exception as e:
+            logger.error("Failed to get all schemas tables: %s", str(e))
+            return {}
+
     def get_table_info(self, schema: str = "olap_schema") -> pd.DataFrame:
         """
         Get information about tables in the schema.
