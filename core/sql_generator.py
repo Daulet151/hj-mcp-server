@@ -1,3 +1,4 @@
+
 """
 SQL query generation using OpenAI and schema documentation.
 """
@@ -52,8 +53,8 @@ class SQLGenerator:
 
         # Append live table section to system prompt
         section = "\n\n=== ВСЕ ДОСТУПНЫЕ ТАБЛИЦЫ В БД (из information_schema) ===\n"
-        section += "Используй эти таблицы для поиска данных. Если olap_schema не даёт результат, пробуй raw, stage, ods_core.\n\n"
-        for schema_name in ("olap_schema", "raw", "stage", "ods_core"):
+        section += "Используй эти таблицы для поиска данных. Приоритет схем: ods_core > ris > raw > stage > olap_schema.\n\n"
+        for schema_name in ("ods_core", "ris", "raw", "stage", "olap_schema"):
             if schema_name in tables:
                 tlist = ", ".join(tables[schema_name])
                 section += f"Схема '{schema_name}' ({len(tables[schema_name])} таблиц):\n{tlist}\n\n"
@@ -83,7 +84,7 @@ class SQLGenerator:
 
         # Build flat table list for Claude to pick from
         all_tables_flat = []
-        for schema_name in ("olap_schema", "raw", "stage", "ods_core"):
+        for schema_name in ("ods_core", "ris", "raw", "stage", "olap_schema"):
             for tbl in self._live_tables.get(schema_name, []):
                 all_tables_flat.append(f"{schema_name}.{tbl}")
 
@@ -290,13 +291,13 @@ class SQLGenerator:
                 tried_block = (
                     f"\n⛔ УЖЕ ПРОБОВАЛИ ЭТИ ТАБЛИЦЫ (данных нет или ошибка) — НЕ ИСПОЛЬЗУЙ ИХ СНОВА:\n"
                     f"{tried_list}\n"
-                    f"✅ ОБЯЗАТЕЛЬНО используй ДРУГУЮ таблицу или ДРУГУЮ схему (raw, stage, ods_core, olap_schema).\n"
+                    f"✅ ОБЯЗАТЕЛЬНО используй ДРУГУЮ таблицу или ДРУГУЮ схему (ods_core, ris, raw, stage, olap_schema).\n"
                 )
 
             if is_empty_result:
                 instruction = (
                     "Запрос вернул 0 строк — данных в этой таблице нет.\n"
-                    "ОБЯЗАТЕЛЬНО смени таблицу или схему. Посмотри в других схемах: raw, stage, ods_core, olap_schema.\n"
+                    "ОБЯЗАТЕЛЬНО смени таблицу или схему. Посмотри в других схемах: ods_core, ris, raw, stage, olap_schema.\n"
                     "Попробуй найти похожие данные в другой таблице из списка доступных таблиц выше.\n"
                     "Верни ТОЛЬКО новый SQL без объяснений."
                 )

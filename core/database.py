@@ -142,7 +142,7 @@ class DatabaseManager:
 
     def get_all_schemas_tables(self) -> dict:
         """
-        Get all tables from all schemas (raw, stage, ods_core, olap_schema) grouped by schema.
+        Get all tables from all schemas (ods_core, ris, raw, stage, olap_schema) grouped by schema.
 
         Returns:
             Dict mapping schema_name -> list of table names
@@ -150,7 +150,7 @@ class DatabaseManager:
         sql = """
             SELECT table_schema, table_name
             FROM information_schema.tables
-            WHERE table_schema IN ('raw', 'stage', 'ods_core', 'olap_schema')
+            WHERE table_schema IN ('ods_core', 'ris', 'raw', 'stage', 'olap_schema')
               AND table_type = 'BASE TABLE'
             ORDER BY table_schema, table_name
         """
