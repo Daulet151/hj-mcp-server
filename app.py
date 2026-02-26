@@ -69,6 +69,36 @@ else:
 
 logger.info("Multi-agent system initialized successfully")
 
+# --- Mention + Thread support ---
+# In-memory set of (channel_id, thread_ts) threads started by @mentioning the bot.
+# Replies in these threads are forwarded to the bot automatically, without needing another @mention.
+active_bot_threads: set = set()
+
+
+def _get_bot_user_id() -> str:
+    """Fetch this bot's own Slack user ID via auth.test at startup."""
+    if not Config.SLACK_BOT_TOKEN:
+        return ""
+    try:
+        resp = requests.post(
+            "https://slack.com/api/auth.test",
+            headers={"Authorization": f"Bearer {Config.SLACK_BOT_TOKEN}"},
+            timeout=10
+        )
+        data = resp.json()
+        if data.get("ok"):
+            uid = data.get("user_id", "")
+            logger.info("Bot user ID resolved: %s", uid)
+            return uid
+        logger.error("auth.test failed: %s", data.get("error"))
+    except Exception as e:
+        logger.error("Failed to fetch bot user ID: %s", str(e))
+    return ""
+
+
+BOT_USER_ID = _get_bot_user_id()
+# --------------------------------
+
 
 def get_slack_user_info(user_id: str) -> dict:
     """
@@ -560,16 +590,74 @@ def slack_events():
     event = data.get('event', {})
     event_type = event.get('type')
 
+    # ── NEW: Handle @mention (app_mention event) ──────────────────────────────
+    # Fires when a user tags @BotName in any channel.
+    # The bot replies in a thread and marks that thread as "active" so follow-up
+    # messages in the same thread are routed to the bot automatically.
+    if event_type == 'app_mention':
+        user_id = event.get('user', 'unknown')
+        channel_id = event.get('channel')
+        # If mention is already inside a thread — continue that thread;
+        # otherwise create a new thread rooted at this message.
+        thread_ts = event.get('thread_ts') or event.get('ts')
+
+        # Strip the bot mention token from the text so the query is clean.
+        raw_text = event.get('text', '').strip()
+        user_prompt = raw_text.replace(f'<@{BOT_USER_ID}>', '').strip() if BOT_USER_ID else raw_text
+
+        # Track thread so future replies land here too.
+        active_bot_threads.add((channel_id, thread_ts))
+
+        if not user_prompt:
+            # Just a bare @mention with no question — greet and wait.
+            post_slack_text_message(
+                channel_id,
+                "👋 Привет! Я *AI Data Analyst*. Задайте ваш вопрос о данных прямо в этой ветке.",
+                thread_ts
+            )
+            return "OK", 200
+
+        logger.info("Mention from user %s in channel %s: %s", user_id, channel_id, user_prompt[:100])
+        threading.Thread(
+            target=process_slack_query,
+            args=(user_prompt, channel_id, user_id, thread_ts),
+            daemon=True
+        ).start()
+        return "OK", 200
+    # ──────────────────────────────────────────────────────────────────────────
+
     # Only process user messages (not bot messages)
     if event_type == 'message' and 'bot_id' not in event and event.get('subtype') != 'bot_message':
 
         user_prompt = event.get('text', '').strip()
         channel_id = event.get('channel')
         user_id = event.get('user', 'unknown')
-        thread_ts = event.get('thread_ts') or event.get('ts')
+        thread_ts_field = event.get('thread_ts')
 
         if not user_prompt:
             return "OK", 200
+
+        # Skip messages that contain a bot @mention — they are handled by
+        # the app_mention branch above to avoid double-processing.
+        if BOT_USER_ID and f'<@{BOT_USER_ID}>' in user_prompt:
+            return "OK", 200
+
+        # ── NEW: thread replies inside an @mention-started thread ─────────────
+        # If the message is a reply inside a thread the bot previously opened
+        # via @mention, route it to the bot (even if the channel is not the
+        # bot's primary channel).
+        if thread_ts_field and (channel_id, thread_ts_field) in active_bot_threads:
+            logger.info("Thread reply from user %s in active bot thread %s: %s",
+                        user_id, thread_ts_field, user_prompt[:100])
+            threading.Thread(
+                target=process_slack_query,
+                args=(user_prompt, channel_id, user_id, thread_ts_field),
+                daemon=True
+            ).start()
+            return "OK", 200
+        # ──────────────────────────────────────────────────────────────────────
+
+        thread_ts = thread_ts_field or event.get('ts')
 
         logger.info("Received message from user %s: %s", user_id, user_prompt[:100])
 
