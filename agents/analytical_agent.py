@@ -180,6 +180,7 @@ class AnalyticalAgent:
                 # Step 5: Analyze with Claude
                 logger.info("Analyzing data with AI...")
                 current_date = datetime.now().strftime("%Y-%m-%d")
+                # privet
                 date_context = f"\n📅 Сегодняшняя дата: {current_date} (timezone Asia/Almaty). Используй её для всех относительных дат ('вчера', 'неделю назад', '30 дней назад' и т.д.).\n"
                 response = self.client.messages.create(
                     model=self.model,
