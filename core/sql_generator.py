@@ -3,6 +3,7 @@
 SQL query generation using OpenAI and schema documentation.
 """
 import re
+from datetime import datetime
 from typing import Dict, Any
 from anthropic import Anthropic
 from utils.logger import setup_logger
@@ -188,7 +189,9 @@ class SQLGenerator:
         logger.info("Generating SQL for prompt: %s", user_prompt[:100])
 
         try:
-            system_text = self.system_prompt
+            date_block = self._get_date_block()
+            logger.info("Date block injected: %s", date_block[:80])
+            system_text = self.system_prompt + date_block
 
             if conversation_context:
                 context_msg = self._build_context_message(conversation_context)
@@ -255,7 +258,7 @@ class SQLGenerator:
         logger.info("Retrying SQL generation with error feedback")
 
         try:
-            system_text = self.system_prompt
+            system_text = self.system_prompt + self._get_date_block()
             if conversation_context:
                 context_msg = self._build_context_message(conversation_context)
                 system_text += "\n\n" + context_msg
@@ -396,6 +399,26 @@ class SQLGenerator:
 
         return response
 
+    @staticmethod
+    def _get_date_block() -> str:
+        """Generate dynamic date context block for the current moment."""
+        now = datetime.now()
+        current_date = now.strftime("%Y-%m-%d")
+        current_year = now.year
+        return (
+            f"\n📅 ТЕКУЩАЯ ДАТА: {current_date} (timezone Asia/Almaty)\n"
+            f"⚠️ ВАЖНО ПРО ДАТЫ:\n"
+            f"- Сегодняшняя дата: {current_date}, текущий год: {current_year}\n"
+            f"- Если пользователь НЕ указал конкретный год в запросе, используй текущий год ({current_year})\n"
+            f"- Для относительных дат ('вчера', 'неделю назад', 'последний месяц') считай от текущей даты {current_date}\n"
+            f"- Примеры:\n"
+            f"  ✅ 'Покажи продажи за январь' → используй январь {current_year}\n"
+            f"  ✅ 'Чекины за последний месяц' → считай от {current_date} минус 30 дней\n"
+            f"  ✅ '30 дней назад' → {current_date} минус 30 дней\n"
+            f"  ❌ НЕ спрашивай какой год, используй {current_year}\n"
+            f"- Если год УКАЗАН явно (например '2024', '2023') - используй указанный год\n"
+        )
+
     def _generate_system_prompt(self, schema_docs: Dict[str, Any]) -> str:
         """Generate comprehensive system prompt from schema documentation."""
         prompt = """Ты — SELECT SQL-бот для базы данных Hero's Journey.
@@ -417,15 +440,6 @@ class SQLGenerator:
           ✅ SELECT ua.*, me.name as marathon_name FROM useraward ua LEFT JOIN raw.marathonevent me ON ua.marathonevent = me.id
         - Если JOIN невозможен (таблица неизвестна), хотя бы включи name/title/description из основной таблицы
         - Пользователь должен видеть НАЗВАНИЯ, не технические ID
-
-        ⚠️ ВАЖНО ПРО ГОД:
-        - Если пользователь НЕ указал конкретный год в запросе, ВСЕГДА используй 2025 год
-        - Примеры:
-          ✅ "Покажи продажи за январь" → используй январь 2025
-          ✅ "Выведи триальщиков за октябрь" → используй октябрь 2025
-          ✅ "Чекины за последний месяц" → используй текущий месяц 2025 года
-          ❌ НЕ спрашивай какой год, просто используй 2025
-        - Если год УКАЗАН явно (например "2024", "2023") - используй указанный год
 
         ВАЖНО ДЛЯ НАЗВАНИЙ ПРОГРАММ:
         - Пользователи могут писать названия программ на русском или в неформальном виде

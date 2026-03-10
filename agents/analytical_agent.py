@@ -4,6 +4,7 @@ Analyzes data extraction queries using schema documentation from YML files
 Executes SQL and provides real data insights
 """
 import re
+from datetime import datetime
 from typing import Dict, Any, Optional, Tuple
 from anthropic import Anthropic
 import pandas as pd
@@ -178,9 +179,11 @@ class AnalyticalAgent:
 
                 # Step 5: Analyze with Claude
                 logger.info("Analyzing data with AI...")
+                current_date = datetime.now().strftime("%Y-%m-%d")
+                date_context = f"\n📅 Сегодняшняя дата: {current_date} (timezone Asia/Almaty). Используй её для всех относительных дат ('вчера', 'неделю назад', '30 дней назад' и т.д.).\n"
                 response = self.client.messages.create(
                     model=self.model,
-                    system=self.analysis_prompt,
+                    system=self.analysis_prompt + date_context,
                     messages=[
                         {"role": "user", "content": f"""Запрос пользователя: {user_query}
 
