@@ -37,10 +37,10 @@ jobs:
           pip install -r requirements.txt --quiet
 
           echo "=== Restarting service ==="
-          sudo systemctl restart slackbot
+          systemctl restart slackbot
 
           sleep 3
-          sudo systemctl is-active slackbot
+          systemctl is-active slackbot
 
           echo "=== Deployment completed ==="
           EOF
