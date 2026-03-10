@@ -3,7 +3,7 @@ name: Deploy to DigitalOcean VPS
 on:
   push:
     branches: [ main ]
-  workflow_dispatch:  # Позволяет запустить вручную
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -22,33 +22,33 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
         run: |
-          sshpass -p "$VPS_PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${VPS_USER}@${VPS_HOST} << 'ENDSSH'
-            cd ~/hj-mcp-server
+          sshpass -p "$VPS_PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${VPS_USER}@${VPS_HOST} 'bash -s' <<'EOF'
+          set -e
 
-            # Pull latest changes (force reset to remote to avoid diverged branch errors)
-            git fetch origin main
-            git reset --hard origin/main
+          cd ~/hj-mcp-server
 
-            # Activate virtual environment
-            source venv/bin/activate
+          echo "=== Fetching latest code ==="
+          git fetch origin main
+          git reset --hard origin/main
+          echo "=== Git HEAD: $(git rev-parse --short HEAD) ==="
 
-            # Install/update dependencies
-            pip install -r requirements.txt
+          echo "=== Installing dependencies ==="
+          source venv/bin/activate
+          pip install -r requirements.txt --quiet
 
-            # Restart service
-            sudo systemctl restart slackbot
+          echo "=== Restarting service ==="
+          sudo systemctl restart slackbot
 
-            # Check status
-            sleep 3
-            sudo systemctl status slackbot --no-pager
+          sleep 3
+          sudo systemctl is-active slackbot
 
-            echo "✅ Deployment completed successfully!"
-          ENDSSH
+          echo "=== Deployment completed ==="
+          EOF
 
       - name: Notify on success
         if: success()
-        run: echo "🚀 Deployed to production!"
+        run: echo "Deployed to production"
 
       - name: Notify on failure
         if: failure()
-        run: echo "❌ Deployment failed!"
+        run: echo "Deployment failed"
