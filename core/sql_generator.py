@@ -189,7 +189,9 @@ class SQLGenerator:
         logger.info("Generating SQL for prompt: %s", user_prompt[:100])
 
         try:
-            system_text = self.system_prompt + self._get_date_block()
+            date_block = self._get_date_block()
+            logger.info("Date block injected: %s", date_block[:80])
+            system_text = self.system_prompt + date_block
 
             if conversation_context:
                 context_msg = self._build_context_message(conversation_context)

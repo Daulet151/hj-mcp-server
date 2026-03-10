@@ -181,7 +181,6 @@ class AnalyticalAgent:
                 logger.info("Analyzing data with AI...")
                 current_date = datetime.now().strftime("%Y-%m-%d")
                 date_context = f"\n📅 Сегодняшняя дата: {current_date} (timezone Asia/Almaty). Используй её для всех относительных дат ('вчера', 'неделю назад', '30 дней назад' и т.д.).\n"
-                # Privet
                 response = self.client.messages.create(
                     model=self.model,
                     system=self.analysis_prompt + date_context,
