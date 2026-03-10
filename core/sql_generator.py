@@ -92,7 +92,7 @@ class SQLGenerator:
             return ""
 
         tables_list = "\n".join(all_tables_flat)
-        # test
+        # i want this text to be seen
         # Ask Claude to pick the most relevant tables
         pick_prompt = f"""Ниже список ВСЕХ таблиц в базе данных:
 
