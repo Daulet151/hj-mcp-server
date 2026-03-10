@@ -82,7 +82,6 @@ class SQLGenerator:
         """
         if not self.db_manager or not self._live_tables:
             return ""
-# Nilu
         # Build flat table list for Claude to pick from
         all_tables_flat = []
         for schema_name in ("ods_core", "ris", "raw", "stage", "olap_schema"):
