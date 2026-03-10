@@ -2,6 +2,7 @@
 Informational Agent
 Handles general questions about the bot functionality and Hero's Journey
 """
+from datetime import datetime
 from anthropic import Anthropic
 from utils.logger import setup_logger
 
@@ -118,9 +119,12 @@ Hero's Journey - это фитнес-программа с различными 
         try:
             logger.info(f"Generating informational response for: {user_query[:100]}")
 
+            current_date = datetime.now().strftime("%Y-%m-%d")
+            date_context = f"\n📅 Сегодняшняя дата: {current_date} (timezone Asia/Almaty). Используй её для всех относительных дат и когда пользователь спрашивает 'сейчас', 'сегодня', 'вчера' и т.д.\n"
+
             response = self.client.messages.create(
                 model=self.model,
-                system=self.system_prompt,
+                system=self.system_prompt + date_context,
                 messages=[
                     {"role": "user", "content": user_query}
                 ],
