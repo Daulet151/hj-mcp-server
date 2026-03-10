@@ -22,28 +22,7 @@ jobs:
           VPS_USER: ${{ secrets.VPS_USER }}
           VPS_PASSWORD: ${{ secrets.VPS_PASSWORD }}
         run: |
-          sshpass -p "$VPS_PASSWORD" ssh -tt -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${VPS_USER}@${VPS_HOST} 'bash -s' <<'EOF'
-          set -e
-
-          cd ~/hj-mcp-server
-
-          echo "=== Fetching latest code ==="
-          git fetch origin main
-          git reset --hard origin/main
-          echo "=== Git HEAD: $(git rev-parse --short HEAD) ==="
-
-          echo "=== Installing dependencies ==="
-          source venv/bin/activate
-          pip install -r requirements.txt --quiet
-
-          echo "=== Restarting service ==="
-          systemctl restart slackbot
-
-          sleep 3
-          systemctl is-active slackbot
-
-          echo "=== Deployment completed ==="
-          EOF
+          sshpass -p "$VPS_PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${VPS_USER}@${VPS_HOST} 'cd ~/hj-mcp-server && git fetch origin main && git reset --hard origin/main && echo "Git HEAD: $(git rev-parse --short HEAD)" && source venv/bin/activate && pip install -r requirements.txt --quiet && sudo systemctl restart slackbot && sleep 3 && sudo systemctl is-active slackbot && echo "Deployment completed"'
 
       - name: Notify on success
         if: success()
