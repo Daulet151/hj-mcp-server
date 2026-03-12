@@ -14,7 +14,11 @@ from utils.logger import setup_logger
 logger = setup_logger(__name__, "INFO")
 
 # Maximum agentic loop iterations to prevent runaway
-MAX_ITERATIONS = 15
+MAX_ITERATIONS = 8
+# Maximum length of final response (Slack limit ~4000 chars)
+MAX_RESPONSE_LENGTH = 3800
+# Max consecutive DB errors before stopping
+MAX_DB_ERRORS = 2
 
 
 class AnalyticalAgent:
@@ -113,6 +117,7 @@ class AnalyticalAgent:
         last_df: Optional[pd.DataFrame] = None
         last_sql: Optional[str] = None
         all_sqls: list = []
+        consecutive_db_errors = 0
 
         for iteration in range(MAX_ITERATIONS):
             logger.info("Agent loop iteration %d", iteration + 1)
@@ -129,6 +134,9 @@ class AnalyticalAgent:
             # If model returns end_turn or no tool use → it's the final answer
             if response.stop_reason == "end_turn":
                 analysis = self._extract_text(response)
+                # Truncate if too long for Slack
+                if len(analysis) > MAX_RESPONSE_LENGTH:
+                    analysis = analysis[:MAX_RESPONSE_LENGTH] + "\n\n_(ответ сокращён, попросите выгрузку в Excel для полных данных)_"
                 logger.info("Agent finished after %d iterations", iteration + 1)
 
                 # Enrich the last dataframe if we have one
@@ -161,6 +169,15 @@ class AnalyticalAgent:
                 logger.info("Agent calls tool: %s", tool_name)
 
                 result = self._execute_tool(tool_name, tool_input)
+
+                # Track consecutive DB connection errors
+                if "error" in result and "timeout" in str(result["error"]).lower():
+                    consecutive_db_errors += 1
+                    if consecutive_db_errors >= MAX_DB_ERRORS:
+                        logger.warning("Too many DB timeouts (%d), forcing early stop", consecutive_db_errors)
+                        result["error"] += " STOP: Database connection unstable. Use data you already have to answer."
+                else:
+                    consecutive_db_errors = 0
 
                 # Track SQL results
                 if tool_name == "run_sql" and "error" not in result:
@@ -197,6 +214,8 @@ class AnalyticalAgent:
             temperature=0.5,
         )
         analysis = self._extract_text(response)
+        if len(analysis) > MAX_RESPONSE_LENGTH:
+            analysis = analysis[:MAX_RESPONSE_LENGTH] + "\n\n_(ответ сокращён)_"
 
         if last_df is not None and not last_df.empty:
             last_df = self._enrich_id_columns(last_df)
