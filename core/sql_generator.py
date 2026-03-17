@@ -266,7 +266,7 @@ class SQLGenerator:
             # Extract schema.table from the failed SQL
             real_columns_info = ""
             failed_schema_table = None
-            if self.db_manager:
+            if self.db_manager and failed_sql:
                 from_match = re.search(r'FROM\s+([\w]+)\.([\w]+)', failed_sql, re.IGNORECASE)
                 if from_match:
                     schema_name, table_name = from_match.group(1), from_match.group(2)

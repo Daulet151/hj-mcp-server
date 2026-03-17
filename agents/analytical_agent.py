@@ -124,7 +124,7 @@ class AnalyticalAgent:
             - dataframe: Query results (for Excel generation later)
             - sql_query: Generated SQL query
         """
-        max_retries = 10
+        max_retries = 3
         last_error = None
         last_sql = None
         tried_tables = set()  # Track schema.table already tried to avoid repeat loops
