@@ -142,7 +142,7 @@ class DatabaseManager:
 
     def get_all_schemas_tables(self) -> dict:
         """
-        Get all tables from all schemas (ods_core, ris, raw, stage, olap_schema) grouped by schema.
+        Get all tables from all schemas (ods_core, stage, ris) grouped by schema.
 
         Returns:
             Dict mapping schema_name -> list of table names
@@ -150,7 +150,7 @@ class DatabaseManager:
         sql = """
             SELECT table_schema, table_name
             FROM information_schema.tables
-            WHERE table_schema IN ('ods_core', 'ris', 'raw', 'stage', 'olap_schema')
+            WHERE table_schema IN ('ods_core', 'stage', 'ris')
               AND table_type = 'BASE TABLE'
             ORDER BY table_schema, table_name
         """
@@ -169,7 +169,7 @@ class DatabaseManager:
             logger.error("Failed to get all schemas tables: %s", str(e))
             return {}
 
-    def get_table_info(self, schema: str = "olap_schema") -> pd.DataFrame:
+    def get_table_info(self, schema: str = "ods_core") -> pd.DataFrame:
         """
         Get information about tables in the schema.
 
@@ -197,7 +197,7 @@ class DatabaseManager:
         Get real column names for a specific table from information_schema.
 
         Args:
-            schema: Schema name (e.g. 'raw', 'olap_schema')
+            schema: Schema name (e.g. 'ods_core', 'stage')
             table: Table name
 
         Returns:

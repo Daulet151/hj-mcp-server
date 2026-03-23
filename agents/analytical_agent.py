@@ -230,12 +230,12 @@ class AnalyticalAgent:
     # Maps a FK column name to (schema, table, name_column)
     # These are the most common FK columns that carry bare IDs users never want to see
     _FK_LOOKUPS = {
-        "award":        ("raw",         "award",         "name"),
-        "marathonevent":("raw",         "marathonevent", "name"),
-        "event":        ("raw",         "event",         "name"),
-        "clan":         ("raw",         "clan",          "name"),
-        "user":         ("raw",         "user",          "username"),
-        "booking":      ("raw",         "booking",       "id"),   # no good name col, skip
+        "award":        ("ods_core",    "award",         "name"),
+        "marathonevent":("ods_core",    "marathonevent", "name"),
+        "event":        ("ods_core",    "event",         "name"),
+        "clan":         ("ods_core",    "clan",          "name"),
+        "user":         ("ods_core",    "user",          "username"),
+        "booking":      ("ods_core",    "booking",       "id"),   # no good name col, skip
     }
     # MongoDB-style ObjectId: exactly 24 hex chars
     _OBJECTID_RE = re.compile(r'^[0-9a-f]{24}$', re.IGNORECASE)
@@ -267,7 +267,7 @@ class AnalyticalAgent:
                     continue
                 # Try to guess table from column name (e.g. "awardid" → "award")
                 guessed_table = col_lower.rstrip("id").rstrip("_")
-                lookup = ("raw", guessed_table, "name")
+                lookup = ("ods_core", guessed_table, "name")
 
             schema, table, name_col = lookup
             # Skip degenerate lookups (e.g. booking has no useful name)

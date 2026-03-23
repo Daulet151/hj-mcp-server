@@ -93,7 +93,7 @@ async def handle_list_tools() -> list[types.Tool]:
             description="""Execute a specific SQL SELECT query against Hero's Journey database.
 
             Use this when you already have a SQL query and want to execute it directly.
-            Only SELECT queries are allowed. The query must use olap_schema prefix for tables.
+            Only SELECT queries are allowed. The query must use ods_core, stage, or ris schema prefix for tables.
 
             Returns query results as formatted text table.
 

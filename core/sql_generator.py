@@ -54,8 +54,13 @@ class SQLGenerator:
 
         # Append live table section to system prompt
         section = "\n\n=== ВСЕ ДОСТУПНЫЕ ТАБЛИЦЫ В БД (из information_schema) ===\n"
-        section += "Используй эти таблицы для поиска данных. Приоритет схем: ods_core > ris > raw > stage > olap_schema.\n\n"
-        for schema_name in ("ods_core", "ris", "raw", "stage", "olap_schema"):
+        section += "Используй эти таблицы для поиска данных.\n"
+        section += "⚠️ ЗАПРЕЩЕНО использовать схемы olap_schema и raw!\n"
+        section += "ПРАВИЛА ВЫБОРА СХЕМЫ:\n"
+        section += "- ods_core — основная схема для общих вопросов (пользователи, чекины, марафоны, платежи и т.д.)\n"
+        section += "- ris — только для вопросов про ретеншн (retention)\n"
+        section += "- stage — запасная схема, если в ods_core нет нужных данных\n\n"
+        for schema_name in ("ods_core", "stage", "ris"):
             if schema_name in tables:
                 tlist = ", ".join(tables[schema_name])
                 section += f"Схема '{schema_name}' ({len(tables[schema_name])} таблиц):\n{tlist}\n\n"
@@ -84,7 +89,7 @@ class SQLGenerator:
             return ""
         # Build flat table list for Claude to pick from
         all_tables_flat = []
-        for schema_name in ("ods_core", "ris", "raw", "stage", "olap_schema"):
+        for schema_name in ("ods_core", "stage", "ris"):
             for tbl in self._live_tables.get(schema_name, []):
                 all_tables_flat.append(f"{schema_name}.{tbl}")
 
@@ -292,13 +297,13 @@ class SQLGenerator:
                 tried_block = (
                     f"\n⛔ УЖЕ ПРОБОВАЛИ ЭТИ ТАБЛИЦЫ (данных нет или ошибка) — НЕ ИСПОЛЬЗУЙ ИХ СНОВА:\n"
                     f"{tried_list}\n"
-                    f"✅ ОБЯЗАТЕЛЬНО используй ДРУГУЮ таблицу или ДРУГУЮ схему (ods_core, ris, raw, stage, olap_schema).\n"
+                    f"✅ ОБЯЗАТЕЛЬНО используй ДРУГУЮ таблицу или ДРУГУЮ схему (ods_core, stage, ris).\n"
                 )
 
             if is_empty_result:
                 instruction = (
                     "Запрос вернул 0 строк — данных в этой таблице нет.\n"
-                    "ОБЯЗАТЕЛЬНО смени таблицу или схему. Посмотри в других схемах: ods_core, ris, raw, stage, olap_schema.\n"
+                    "ОБЯЗАТЕЛЬНО смени таблицу или схему. Посмотри в других схемах: ods_core, stage, ris.\n"
                     "Попробуй найти похожие данные в другой таблице из списка доступных таблиц выше.\n"
                     "Верни ТОЛЬКО новый SQL без объяснений."
                 )
@@ -433,9 +438,9 @@ class SQLGenerator:
         - Если в результате есть FK-колонка (award, marathonevent, user, clan, event и т.д.) — ВСЕГДА делай JOIN чтобы получить человекочитаемое название
         - Примеры:
           ❌ SELECT award FROM useraward → возвращает "611208d4b8fd8d00172c81f0" — ЗАПРЕЩЕНО
-          ✅ SELECT ua.*, aw.name as award_name FROM useraward ua LEFT JOIN raw.award aw ON ua.award = aw.id
+          ✅ SELECT ua.*, aw.name as award_name FROM ods_core.useraward ua LEFT JOIN ods_core.award aw ON ua.award = aw.id
           ❌ SELECT marathonevent FROM useraward → возвращает голый ID
-          ✅ SELECT ua.*, me.name as marathon_name FROM useraward ua LEFT JOIN raw.marathonevent me ON ua.marathonevent = me.id
+          ✅ SELECT ua.*, me.name as marathon_name FROM ods_core.useraward ua LEFT JOIN ods_core.marathonevent me ON ua.marathonevent = me.id
         - Если JOIN невозможен (таблица неизвестна), хотя бы включи name/title/description из основной таблицы
         - Пользователь должен видеть НАЗВАНИЯ, не технические ID
 
@@ -445,10 +450,16 @@ class SQLGenerator:
         - Используй таблицу синонимов программ ниже для правильного маппинга
         - Римские цифры (I, II, III, IV) НЕ заменяй на арабские (1, 2, 3, 4) в SQL!
 
+        ПРАВИЛА ВЫБОРА СХЕМЫ:
+        - ods_core — основная схема для общих вопросов (пользователи, чекины, марафоны, платежи и т.д.)
+        - ris — только для вопросов про ретеншн (retention)
+        - stage — запасная схема, если в ods_core нет нужных данных
+        ⚠️ ЗАПРЕЩЕНО использовать olap_schema и raw!
+
         ЧАСТЫЕ ОШИБКИ (НЕ ДЕЛАЙ):
         ❌ Использовать поля из другой таблицы без JOIN
         ❌ Выдумывать названия колонок
-        ❌ Забывать про схему olap_schema
+        ❌ Использовать схему olap_schema или raw
         ❌ Писать "Burn 1" вместо "Burn I"
         ❌ Писать "Берн 1" вместо "Burn I"
         ❌ Писать "Fit Body III" вместо "Fit body III"
