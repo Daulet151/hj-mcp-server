@@ -657,19 +657,8 @@ def slack_events():
             return "OK", 200
         # ──────────────────────────────────────────────────────────────────────
 
-        thread_ts = thread_ts_field or event.get('ts')
-
-        logger.info("Received message from user %s: %s", user_id, user_prompt[:100])
-
-        # Process in background thread to avoid Slack timeout
-        thread = threading.Thread(
-            target=process_slack_query,
-            args=(user_prompt, channel_id, user_id, thread_ts),
-            daemon=True
-        )
-        thread.start()
-
-        # Immediately respond to Slack
+        # Ignore all other messages — the bot only responds when @mentioned
+        # or when users reply inside an already-active bot thread.
         return "OK", 200
 
     # Handle emoji reactions (👍/👎) for query pattern feedback
